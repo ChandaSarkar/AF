@@ -1,0 +1,85 @@
+define(['DynamicTable', 'GeneralSetup', 'DynamicContent', 'DynFilter', 'ButtonComponentFlyover', 'ImageComponentFlyover', 'CarouselFlyover', 'ParagraphComponentFlyover', 'TableComponentFlyover', 'TableActions', 'PageLayout', 'HtmlGenerator', 'FlyoverGenerator', 'DroppableSortableHandler'],
+        function(DynamicTable, GeneralSetup, DynamicContent, DynFilter, ButtonComponentFlyover, ImageComponentFlyover, CarouselFlyover, ParagraphComponentFlyover, TableComponentFlyover, TableActions, PageLayout, HtmlGenerator, FlyoverGenerator, DroppableSortableHandler) {
+
+            // Customizable tabular library
+            var dynamicTable = new DynamicTable();
+            appGlobals.globals.pubsubQueue.subscribe("generateTable", dynamicTable.generateTableLayout);
+            appGlobals.globals.pubsubQueue.subscribe("addRowAndColumn", dynamicTable.addRowColumn);
+            appGlobals.globals.pubsubQueue.subscribe("attachDroppableEvent", dynamicTable.attachTableDroppableEvent);
+
+            // General Setup starts here
+            var GS = new GeneralSetup();
+            appGlobals.globals.pubsubQueue.subscribe("resetContentType", GS.resetContentType);
+            GS.init();
+
+            var DC = new DynamicContent();
+            DC.init();
+            appGlobals.globals.pubsubQueue.subscribe("makeVenueCall", DC.makeVenueCall);
+            appGlobals.globals.pubsubQueue.subscribe("addElementsEvent", DC.placeElement);
+            appGlobals.globals.pubsubQueue.subscribe("moveToOuterLayout", DC.attachElementToOuterLayout);
+            appGlobals.globals.pubsubQueue.subscribe("updateComponent", DC.updateComponent);
+            appGlobals.globals.pubsubQueue.subscribe("updateComponentOrder", DC.updateComponentOrder);
+            appGlobals.globals.pubsubQueue.subscribe("updateAllComponentOrder", DC.updateAllComponentOrder);
+            appGlobals.globals.pubsubQueue.subscribe("resetPageCanvasHeight", DC.resetPageCanvasHeight);
+            appGlobals.globals.pubsubQueue.subscribe("resetColumn", DC.resetColumn);
+            appGlobals.globals.pubsubQueue.subscribe("callUpdatePageList", DC.callUpdatePageList);
+            appGlobals.globals.pubsubQueue.subscribe("savePageComponent", DC.savePageComponent);
+            appGlobals.globals.pubsubQueue.subscribe("setSmartFormName", DC.setSmartFormName);
+            appGlobals.globals.pubsubQueue.subscribe("setSmartFormValue", DC.setSmartFormValue);
+            appGlobals.globals.pubsubQueue.subscribe("setSmartForm", DC.setSmartForm);
+            appGlobals.globals.pubsubQueue.subscribe("getApplicationContentType", DC.getApplicationContentType);
+
+            var DF = new DynFilter();
+            DF.init();
+            appGlobals.globals.pubsubQueue.subscribe("initializeCategory", DF.showCategoryFiltersList);
+
+            var CF = new CarouselFlyover();
+            CF.init();
+
+            var BCF = new ButtonComponentFlyover();
+            BCF.init();
+
+            var ICF = new ImageComponentFlyover();
+            appGlobals.globals.pubsubQueue.subscribe("removeComponentBackgroundImage", ICF.removeComponentBackground);
+            ICF.init();
+
+            var PCF = new ParagraphComponentFlyover();
+            PCF.init();
+
+            var TCF = new TableComponentFlyover();
+            appGlobals.globals.pubsubQueue.subscribe("drawTableOnCanvas", TCF.drawTableOnCanvas);
+            TCF.init();
+
+            var TA = new TableActions();
+            TA.init();
+
+            var PL = new PageLayout();
+            appGlobals.globals.pubsubQueue.subscribe("reinitializeTableFlyover", PL.reinitializeTableFlyover);
+            appGlobals.globals.pubsubQueue.subscribe("showLayout", PL.showLayout);
+            PL.init();
+
+            var HG = new HtmlGenerator();
+            appGlobals.globals.pubsubQueue.subscribe("generateSmartFormList", HG.generateSmartFormList);
+            appGlobals.globals.pubsubQueue.subscribe("initializeVenueList", HG.generateVenueHTML);
+            appGlobals.globals.pubsubQueue.subscribe("generateButtonTypeDropDown", HG.generateButtonTypeDropDown);
+            appGlobals.globals.pubsubQueue.subscribe("generateFontFaceDropDown", HG.generateFontFaceDropDown);
+            appGlobals.globals.pubsubQueue.subscribe("generateFontsList", HG.generateFontsList);
+            appGlobals.globals.pubsubQueue.subscribe("generateColumnList", HG.generateColumnList);
+
+            var DD = new DroppableSortableHandler();
+            appGlobals.globals.pubsubQueue.subscribe("attachDroppableEventInCanvas", DD.attachDroppableEvent);
+            appGlobals.globals.pubsubQueue.subscribe("setDynFormEvent", DD.setDynFormEvent);
+            appGlobals.globals.pubsubQueue.subscribe("attachEvent", DD.setDynamicEvent);
+            appGlobals.globals.pubsubQueue.subscribe("resetSmartFormHeight", DD.resetSmartFormHeight);
+
+            var FG = new FlyoverGenerator();
+            FG.init();
+            appGlobals.globals.pubsubQueue.subscribe("generateImageFlyover", FG.generateImageFlyover);
+            appGlobals.globals.pubsubQueue.subscribe("generateParagraphFlyover", FG.generateParagraphFlyover);
+            appGlobals.globals.pubsubQueue.subscribe("generatePhoneNumberFlyover", FG.generatePhoneNumberFlyover);
+            appGlobals.globals.pubsubQueue.subscribe("generateSmartFormFlyover", FG.generateSmartFormFlyover);
+            appGlobals.globals.pubsubQueue.subscribe("generateFormElementFlyover", FG.generateFormElementFlyover);
+            appGlobals.globals.pubsubQueue.subscribe("generateTableFlyover", FG.generateTableFlyover);
+            appGlobals.globals.pubsubQueue.subscribe("generateCanvasFlyover", FG.generateCanvasFlyover);
+
+        });

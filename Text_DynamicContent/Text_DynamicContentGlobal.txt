@@ -1,0 +1,179 @@
+define(function() {
+    // This method will display error message.
+    var showErrorBox = function(input, outPut) {
+        if (outPut.success === false) {
+            var url = input.url;
+            var action = $.trim(url.replace(appGlobals.globals.appbuilderURL, ''));
+            var data = input.data;
+
+            if (data.type === "form" && action === "delete-entity") {
+                $("#common-error .modal-header h3").html("Delete Smart Form?");
+            }
+            $("#common-error .modal-body b").html(outPut.message);
+            $("#common-error-link").click();
+        }
+    };
+
+    /**
+     * This is a globalized standard for ajax calling
+     *
+     * obj.type: This will determine the type  (POST,GET, etc)
+     * obj.async: This will determine asyn is true or false
+     * onj.url: This will determine the url of api
+     * obj.data: This will determine the object that has been sent to api call
+     * obj.ajaxComponent: This will determine extra parameter to pass with the response
+     * obj.returnFromError: This will determine of we want to redirect the callback on error
+     */
+    var ajaxCalling = function(obj, callback) {
+        var result;
+
+        $.ajax({
+            type: obj.type,
+            async: obj.async,
+            url: obj.url,
+            dataType: "json",
+            data: obj.data,
+            beforeSend: function() {
+                $('.ajax-status-icons').show();
+                ++appGlobals.globals.ajaxCallCount;
+            },
+            error: function(response) {
+                var data = jQuery.parseJSON(response.responseText);
+                if ($("#common-error").is(":visible") === false) {
+                    showErrorBox(obj, data);
+                }
+                if (obj.returnFromError === true) {
+                    callback(response);
+                }
+            },
+            success: function(data) {
+                result = data;
+                if (callback) {
+                    if (obj.ajaxComponent) {
+                        callback(data, obj.ajaxComponent);
+                    } else {
+                        callback(data);
+                    }
+                }
+            },
+            complete: function() {
+                --appGlobals.globals.ajaxCallCount;
+                if (appGlobals.globals.ajaxCallCount === 0) {
+                    $('.ajax-status-icons').hide();
+                }
+            }
+        });
+
+        return result;
+    };
+
+    // This method will generate color code
+    var generateColorCode = function(color) {
+        var code;
+
+        color = color.toLowerCase();
+        if (color.indexOf('rgb') === 0 &&
+                color.indexOf('rgba') === -1) {
+            color = color.replace('rgb', 'rgba');
+            color = color.replace(')', ', 1)');
+        }
+        code = color;
+
+        code = code.replace("rgba(", "");
+        code = code.replace(")", "");
+        var bkColorArray = code.split(',');
+        if (bkColorArray) {
+            bkColorArray[0] = (bkColorArray[0] / 255 * 100) / 100;
+            bkColorArray[1] = (bkColorArray[1] / 255 * 100) / 100;
+            bkColorArray[2] = (bkColorArray[2] / 255 * 100) / 100;
+            bkColorArray[3] = (bkColorArray[3] * 100) / 100;
+        }
+
+        return bkColorArray.toString();
+    };
+
+    // This method will generate color code
+    var convertHexToRgb = function(color) {
+        color = color.split(',');
+        var r = (color[0] * 255 / 100) * 100;
+        r = r.toFixed();
+        var g = (color[1] * 255 / 100) * 100;
+        g = g.toFixed();
+        var b = (color[2] * 255 / 100) * 100;
+        b = b.toFixed();
+        var o = (color[3] / 100) * 100;
+        return "rgba(" + r + "," + g + "," + b + "," + o + ")";
+    };
+
+    // This method will validate email address.
+    var validateEmail = function(email) {
+        if (email === "") {
+            return 1;
+        }
+        var expr = /^([\w-\.]+)@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.)|(([\w-]+\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\]?)$/;
+        return expr.test(email);
+    };
+
+    // This method will iterate through properties to give appropriate property value
+    var findIndexOfElement = function(propertyArr, propertyName) {
+        var indexPosition = "";
+        for (var index = 0; index < propertyArr.length; ++index) {
+            if (propertyArr[index].name.toLowerCase() === propertyName.toLowerCase()) {
+                indexPosition = propertyArr[index].value;
+            }
+        }
+
+        return indexPosition;
+    };
+
+    // This method will reset open button of upload image
+    var resetOpenButton = function() {
+        if ($(".img-common-modal tbody .asset-image").find(".selected-image").length < 1) {
+            $('.img-common-modal #submitHandler').attr("disabled", "disabled");
+        } else {
+            $('.img-common-modal #submitHandler').removeAttr("disabled");
+        }
+    };
+
+    require.config({
+        waitSeconds: 15,
+        baseUrl: appGlobals.globals.jsPath,
+        paths: {
+            GeneralSetup: appGlobals.globals.dyncontentPath + 'GeneralSetup',
+            DynamicContent: appGlobals.globals.dyncontentPath + 'DynamicContent',
+            DynFilter: appGlobals.globals.dyncontentPath + 'DynamicFilter',
+            ButtonComponentFlyover: appGlobals.globals.dyncontentPath + 'ButtonComponentFlyover',
+            ImageComponentFlyover: appGlobals.globals.dyncontentPath + 'ImageComponentFlyover',
+            ParagraphComponentFlyover: appGlobals.globals.dyncontentPath + 'ParagraphComponentFlyover',
+            TableComponentFlyover: appGlobals.globals.dyncontentPath + 'TableComponentFlyover',
+            CarouselFlyover: appGlobals.globals.dyncontentPath + 'CarouselFlyover',
+            DynamicContentMain: appGlobals.globals.dyncontentPath + 'DynamicContentMain',
+            DynamicTable: appGlobals.globals.dyncontentPath + 'DynamicTable',
+            TableActions: appGlobals.globals.dyncontentPath + 'TableActions',
+            PageLayout: appGlobals.globals.dyncontentPath + 'PageLayout',
+            HtmlGenerator: appGlobals.globals.dyncontentPath + 'HtmlGenerator',
+            FlyoverGenerator: appGlobals.globals.dyncontentPath + 'FlyoverGenerator',
+            DroppableSortableHandler: appGlobals.globals.dyncontentPath + 'DroppableSortableHandler',
+            Treestructure: appGlobals.globals.assetPath + 'Treestructure'
+        }
+    });
+
+    // Adding Dynamic Content specific object to global object
+    appGlobals.globals.getImageData = 0;
+    appGlobals.globals.ajaxCalling = ajaxCalling;
+    appGlobals.globals.ajaxCallCount = 0;
+    appGlobals.globals.findIndexOfElement = findIndexOfElement;
+    appGlobals.globals.isUpdateAppContentTypeList = 0;
+    appGlobals.globals.isUpdateAppDynamicButtonList = 0;
+    appGlobals.globals.isUpdateAppFontList = 0;
+    appGlobals.globals.isUpdateAppSmartFormList = 0;
+    appGlobals.globals.generateColorCode = generateColorCode;
+    appGlobals.globals.convertHexToRgb = convertHexToRgb;
+    appGlobals.globals.validateEmail = validateEmail;
+    appGlobals.globals.resetOpenButton = resetOpenButton;
+    appGlobals.globals.defaultFontFamilies = ["Arial", "Avenir", "Georgia", "Helvetica", "Proxima Nova", "Times New Roman"];
+    appGlobals.globals.defaultFontFamilies.sort();
+    appGlobals.globals.categories = '';
+    appGlobals.globals.isNewPageCreated = 0;
+    require(['DynamicContentMain']);
+});

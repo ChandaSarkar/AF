@@ -1,0 +1,242 @@
+define(function() {
+    /**
+     * This is a globalized standard for ajax calling
+     *
+     * obj.type: This will determine the type  (POST,GET, etc)
+     * obj.async: This will determine asyn is true or false
+     * onj.url: This will determine the url of api
+     * obj.data: This will determine the object that has been sent to api call
+     * obj.ajaxComponent: This will determine extra parameter to pass with the response
+     * obj.returnFromError: This will determine of we want to redirect the callback on error
+     */
+    var ajaxCalling = function(obj, callback) {
+        var result;
+
+        $.ajax({
+            type: obj.type,
+            async: obj.async,
+            url: obj.url,
+            dataType: "json",
+            data: obj.data,
+            beforeSend: function() {
+                $('.ajax-status-icons').show();
+                ++appGlobals.globals.ajaxCallCount;
+            },
+            error: function(response) {
+                var data = jQuery.parseJSON(response.responseText);
+                $("#common-error .modal-body b").html(data.message);
+                $("#common-error-link").click();
+                if (obj.returnFromError === true) {
+                    callback(response);
+                }
+            },
+            success: function(data) {
+                result = data;
+                if (callback) {
+                    if (obj.ajaxComponent) {
+                        callback(data, obj.ajaxComponent);
+                    } else {
+                        callback(data);
+                    }
+                }
+            },
+            complete: function() {
+                --appGlobals.globals.ajaxCallCount;
+                if (appGlobals.globals.ajaxCallCount === 0) {
+                    $('.ajax-status-icons').hide();
+                }
+            }
+        });
+
+        return result;
+    };
+
+    // This method will retrieve folder and file list of particular folder
+    var getFolderFiles = function(parameterObj) {
+        var url = appGlobals.globals.assetURL + 'get-sorted-folder-files';
+        var response = {};
+        $('.ajax-status-icons').show();
+        $.ajax({
+            type: "GET",
+            async: true,
+            url: url,
+            data: parameterObj,
+            dataType: "json",
+            error: function() {
+                $('.ajax-status-icons').hide();
+            },
+            success: function(data) {
+                response = data;
+                appGlobals.globals.generateFolderFileList(response);
+                $('.ajax-status-icons').hide();
+            }
+        });
+    };
+
+    // This method will generate tree structured tags
+    var appendFolder = function(data) {
+        var htmlContent = "<ul>";
+
+        $.each(data, function(i, field) {
+            Mustache.tags = ['{|', '|}'];
+            var folderListTemplate = $("#folder-list-template").html();
+            var emptyFolderTemplate = $("#empty-folder-template").html();
+
+            if (field.folders) {
+                var tempHTML = Mustache.render(folderListTemplate, field);
+                var newHTML = appendFolder(field.folders);
+
+                htmlContent += $(tempHTML).append(newHTML).get(0).outerHTML;
+            } else {
+                htmlContent += Mustache.render(emptyFolderTemplate, field);
+            }
+        });
+
+        htmlContent += "</ul>";
+        return htmlContent;
+    };
+
+    // This method will generate folder tree structure.
+    var generateHTML = function(data) {
+        var htmlContent = "";
+
+        appGlobals.globals.getParentFolderId = data.id;
+        $("#hidden-parent-id").val(data.id);
+        if (data.folders) {
+            htmlContent += "<div class='tree well'>";
+            htmlContent += "<ul><li data-id='" + data.id + "' data-name='Root'><span class='folder'>Root</span>";
+            htmlContent += appendFolder(data.folders);
+            htmlContent += "</li></ul>";
+            htmlContent += "</div>";
+        }
+        $(".folder-tree").html(htmlContent);
+        $(".parent_li").click();
+    };
+
+    // This method will populate data in table.
+    var generateFolderFileList = function(data) {
+        var folderList = data.folders;
+        var fileList = data.files;
+        var counter = 0;
+
+        $('.ajax-status-icons').css('display', 'block');
+        $("#list-table tbody").html(" ");
+        $(".empty-folder").css("display", "none");
+        if (folderList) {
+            $("#list-table tbody").html(" ");
+            var folderTemplate = $("#new-folder-template").html();
+            Mustache.tags = ['{|', '|}'];
+            for (var index = 0; index < folderList.length; ++index) {
+                var node = folderList[index];
+                $("#list-table tbody").append(Mustache.render(folderTemplate, node));
+                $.data($("#" + node.id)[0], 'property', node);
+                var folderName = node.name;
+                if (folderName.length > 60) {
+                    folderName = folderName.substring(0, 60);
+                    folderName = folderName + "...";
+                }
+                $("#" + node.id).find(".name .foldername").html(folderName);
+
+                if (typeof (node.files) !== 'undefined') {
+                    if (node.files.length <= 0) {
+                        $("#list-table #" + node.id + " li .download-img").parents("li").remove();
+                    }
+                } else {
+                    $("#list-table #" + node.id + " li .download-img").parents("li").remove();
+                }
+
+                if (appGlobals.globals.isRetina) {
+                    var element = "#list-table tr td .folder-image-icon img";
+                    appGlobals.globals.updateRetinaImageName(element);
+                }
+                counter++;
+            }
+        }
+
+        if (fileList) {
+            var folderTemplate = $("#new-file-template").html();
+            Mustache.tags = ['{|', '|}'];
+            for (var index = 0; index < fileList.length; ++index) {
+                var node = fileList[index];
+                $("#list-table tbody").append(Mustache.render(folderTemplate, node));
+                $.data($("#" + node.id)[0], 'property', node);
+                var fileName = node.name;
+                var types = node.type;
+                if (fileName.length > 60) {
+                    fileName = fileName.substring(0, 60);
+                    fileName = fileName + ".." + types.type;
+                }
+                $("#" + node.id).find(".name .filename").html(fileName);
+                if (types.type === ".pdf") {
+                    var src = $("#" + node.id).find("td .file-type img").attr("src");
+                    src = src.replace("image", "pdf");
+                    $("#" + node.id).find("td .file-type img").attr("src", src);
+                }
+                var size = Math.round(node.size / 1000) + " kb";
+                $("#" + node.id + " .size .content").html(size);
+                $("#" + node.id + " .name .filename").attr("title", fileName);
+                if (appGlobals.globals.isRetina) {
+                    var element = "#list-table tr td .file-type img";
+                    appGlobals.globals.updateRetinaImageName(element);
+                }
+                counter++;
+            }
+        }
+
+        if (!counter) {
+            $(".empty-folder").css("display", "block");
+        }
+        $('.ajax-status-icons').css('display', 'none');
+    };
+
+    var getFolderStructureDetails = function() {
+        var url = appGlobals.globals.assetURL + 'get-root-structure';
+        var result;
+        var data = {"sort": 1};
+
+        $.ajax({
+            type: "GET",
+            async: false,
+            url: url,
+            data: data,
+            dataType: "json",
+            error: function() {
+                appGlobals.globals.errorMessage("Server error, please contact administrator.", "error");
+                document.getElementById("firstLevelFolder").style.pointerEvents = 'none';
+                document.getElementById("createFirstLevelFolder").style.pointerEvents = 'none';
+                document.getElementById("uploadFirstLevelAssets").style.pointerEvents = 'none';
+                $('.ajax-status-icons').hide();
+            },
+            success: function(data) {
+                result = data;
+            },
+            complete: function() {
+                $('.ajax-status-icons').hide();
+            }
+        });
+
+        return result;
+    };
+
+    require.config({
+        waitSeconds: 15,
+        baseUrl: appGlobals.globals.jsPath,
+        paths: {
+            Treestructure: appGlobals.globals.assetPath + 'Treestructure',
+            Uploadfiles: appGlobals.globals.assetPath + 'Uploadfiles',
+            Flyover: appGlobals.globals.assetPath + 'Flyover',
+            Foldertree: appGlobals.globals.assetPath + 'Foldertree',
+            AssetMain: appGlobals.globals.assetPath + 'AssetMain'
+        }
+    });
+
+    // Adding Asset specific object to global object
+    appGlobals.globals.ajaxCalling = ajaxCalling;
+    appGlobals.globals.getFolderDetails = getFolderStructureDetails;
+    appGlobals.globals.generateHTML = generateHTML;
+    appGlobals.globals.generateFolderFileList = generateFolderFileList;
+    appGlobals.globals.getFolderFiles = getFolderFiles;
+    appGlobals.globals.getParentFolderId = "";
+
+    require(['AssetMain']);
+});

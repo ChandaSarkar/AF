@@ -1,0 +1,238 @@
+define(function() {
+
+    // Declaring an object that contains all methods for dynamic table
+    var DynamicTable = function() {
+        var self = this;
+
+        // This method will find position of all components in table
+        var getElementList = function() {
+            var elementList = [];
+
+            $(".body .dyn-table-layout td:not(.empty-container)").each(function() {
+                var componentIndex = $(this).index();
+                var data = $(this).parents("table").prev().html();
+                var tableIndex = parseInt(data.match(/\d/)[0]) - 1;
+                var componentHtml = $(this).html(); // It will give from LI tag
+                var obj = {'html': componentHtml,
+                    'componentIndex': componentIndex,
+                    'tableIndex': tableIndex};
+
+                elementList.push(obj);
+            });
+
+            return elementList;
+        };
+
+        // This method will components from earlier table to newly created table
+        var addComponentsInTable = function(elementList) {
+            var outerLayoutElement = [];
+
+            // Iterating through components
+            for (var index = 0; index < elementList.length; ++index) {
+                var component = elementList[index];
+
+                // Check if table exist
+                var table = $(".body .dyn-table-layout:eq(" + component.tableIndex + ")");
+                var isTableExist = $(table).length > 0 ? true : false;
+                if (isTableExist === true) {
+                    // Check if cell exist of not
+                    var cell = $(table).find("td:eq(" + component.componentIndex + ")");
+                    var isCellExist = $(cell).length > 0 ? true : false;
+                    if (isCellExist === true) {
+                        $(cell).html(component.html);
+                        $(cell).removeClass("empty-container");
+                    } else {
+                        // This component must go into outer layout
+                        outerLayoutElement.push(component.html);
+                    }
+                } else {
+                    // This component must go into outer layout
+                    outerLayoutElement.push(component.html);
+                }
+            }
+
+            return outerLayoutElement;
+        };
+
+        // This method will add rows and columns
+        this.addRowColumn = function(data) {
+            // Input of rows and column from table
+            var rowList = data.row;
+            var columnCount = data.column;
+            var tableTemplate = $("#custom-table-template").html();
+            var cellTemplate = $("#custom-cell-template").html();
+            var tableLayout = '';
+            var elementList = [];
+            var rowArray = [];
+
+            // Generating the structure of rows and columns
+            Mustache.tags = ['{|', '|}'];
+            for (var rowIndex = 0; rowIndex < rowList.length; ++rowIndex) {
+                var temp = tableTemplate;
+                var currentRow = rowList[rowIndex];
+                var cellCount = columnCount[currentRow.id];
+                var rowIndexPostion = parseInt(appGlobals.globals.findIndexOfElement(currentRow.properties, "Index"));
+                var columnObject = {};
+
+                // generating td tags
+                var cellMarkup = '';
+                for (var columnIndex = 0; columnIndex < cellCount; ++columnIndex) {
+                    var cellTempTemplate = cellTemplate;
+                    columnObject.columnIndex = columnIndex + 1;
+                    cellMarkup = cellMarkup + Mustache.render($.trim(cellTempTemplate), columnObject);
+                }
+
+                temp = temp.replace('{|tdTemplate|}', cellMarkup);
+                temp = temp.replace('{|rowIndex|}', rowIndexPostion + 1);
+                rowArray[rowIndexPostion] = Mustache.render($.trim(temp), currentRow);
+            }
+
+            tableLayout = rowArray.toString().replace(/,/g, '');
+
+            // Check if table already existed if yes take a bundle up all its components
+            var isTableExit = $(".body .dyn-table-layout").length > 0 ? true : false;
+            if (isTableExit === true) {
+                // Table exist; check if table has components in it
+                var tableHasComponents = $(".body .dyn-table-layout td:not(.empty-container)").length > 0 ? true : false;
+                if (tableHasComponents === true) {
+                    // Take a backup
+                    elementList = getElementList();
+                }
+            }
+
+            // Removing earlier layout
+            $('.body dyn-table-container').remove();
+
+            // Attaching new layout to table
+            $('.body').html('<div class="dyn-table-container"></div>');
+            $(".dyn-table-container").html(tableLayout);
+
+            // Setting up table row height
+            var rowHeight = $("#layout .body").height() / rowList.length;
+            rowHeight = rowHeight - 1;
+            var rowLableHeight = rowHeight - $(".body .dyn-table-container .dyn-lable-row").height() - 1;
+            $(".body .dyn-table-container .dyn-table-row").height(rowHeight);
+            $(".body .dyn-table-container .dyn-lable-row").css('margin-top', rowLableHeight + 'px');
+            $(".body .dyn-table-container .dyn-add-row").css('margin-top', rowLableHeight + 'px');
+            var cellHeight = $(".body .dyn-table-container td").height();
+            $(".body .dyn-table-container td > li").height(cellHeight);
+
+            // Add earlier existing components if found any
+            if (elementList.length > 0) {
+                elementList = addComponentsInTable(elementList);
+            }
+
+            // Append components to outer layout that dont fit into dynamic table
+            if (elementList.length > 0) {
+                appGlobals.globals.pubsubQueue.publish("addElementsEvent", elementList);
+            }
+
+            self.attachTableDroppableEvent();
+        };
+
+        // This method will form objct for making API call. Its a re-usable method
+        var formComponentInfo = function(dataObj) {
+            var componentObj = {};
+
+            if (dataObj.componentType.toLowerCase() === "button") {
+                var buttonType = $('.button-type #select-button-type option:first').val();
+                if (buttonType) {
+                    componentObj = {type: dataObj.componentInitialId, "byttonType": buttonType};
+                } else {
+                    componentObj = {type: dataObj.componentInitialId};
+                }
+            } else {
+                componentObj = {type: dataObj.componentInitialId};
+            }
+            return componentObj;
+        };
+
+        // This method will be called on response after adding elements into table
+        var afterResponse = function(response) {
+            var element = $("#layout .body .dyn-table-container li[data-parent='" + response.parentItem + "']");
+
+            $(element).attr("id", response.id);
+            $(element).data('property', response);
+        };
+
+        // This method will attach droppable event
+        this.attachTableDroppableEvent = function() {
+            $("#layout .body .dyn-table-container td").droppable({
+                activeClass: "ui-state-default",
+                hoverClass: "ui-state-hover",
+                accept: ":not(.ui-sortable-helper)",
+                tolerance: 'pointer',
+                greedy: true,
+                over: function() {
+                    if ($(this).hasClass('empty-container') === true) {
+                        $(this).addClass('grey-out');
+                    }
+                },
+                out: function() {
+                    if ($(this).hasClass('empty-container') === true) {
+                        $(this).removeClass('grey-out');
+                    }
+                },
+                drop: function(event, ui) {
+                    // The cell is not empty hence cannot drop elements into it
+                    if ($(this).hasClass('empty-container') === false) {
+                        return;
+                    }
+                    $(this).removeClass('grey-out');
+
+                    // Cannot drop elements like - table, row or cell into a table
+                    var droppedComponent = ui.draggable.attr("data-markup");
+                    var droppedComponentLower = droppedComponent.toLowerCase();
+                    if (droppedComponentLower.indexOf("table") > -1 ||
+                            droppedComponentLower.indexOf("column") > -1 ||
+                            droppedComponentLower.indexOf("row") > -1 ||
+                            droppedComponentLower.indexOf("smartform") > -1) {
+                        return;
+                    }
+
+                    // Initializing values
+                    var componentId = $(ui.draggable).attr("id");
+                    var componentType = ui.draggable.attr("type");
+                    var pageId = $("#hidden-page-id").val();
+                    var appId = $("#application-name").attr("data-id");
+                    var parentId = $(this).attr("id");
+                    var elementIndex = $(this).index();
+
+                    // Placing element into cell
+                    $(this).removeClass("empty-container");
+                    $(this).find('> li').attr('data-parent', parentId);
+                    $(this).find('> li').html(droppedComponent);
+
+                    var dataObj = {};
+                    dataObj.componentType = componentType;
+                    dataObj.componentInitialId = componentId;
+
+                    // Fetching component object
+                    var pageComponentInfoObject = formComponentInfo(dataObj);
+
+                    // Attaching parent ID to current comoponent
+                    pageComponentInfoObject.parentItem = parentId;
+                    pageComponentInfoObject.properties = [];
+                    pageComponentInfoObject.properties.push({
+                        name: "Index",
+                        value: "" + elementIndex
+                    });
+
+                    var componentObj = {};
+                    componentObj.type = "POST";
+                    componentObj.async = true;
+                    componentObj.dataType = 'json';
+                    componentObj.data = {"type": 'page-content', 'appId': appId, 'pageId': pageId, 'info': JSON.stringify(pageComponentInfoObject)};
+                    componentObj.url = appGlobals.globals.appbuilderURL + 'add-entity';
+
+                    appGlobals.globals.ajaxCalling(componentObj, afterResponse);
+
+                }
+            });
+
+            appGlobals.globals.pubsubQueue.publish("attachEvent");
+        };
+    };
+
+    return DynamicTable;
+});

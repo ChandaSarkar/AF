@@ -1,0 +1,195 @@
+define(function() {
+
+    // Declaring an object that contains all methods regarding page layout actions
+    var PageLayout = function() {
+        var self = this;
+
+        // This object contains list of all constants used in this js file
+        var constants = {
+            TABLE_IMAGE_HEADER: appGlobals.globals.imgPath + appGlobals.globals.dyncontentPath + 'table_header.png',
+            TABLE_IMAGE_HEADER_2X: appGlobals.globals.imgPath + appGlobals.globals.dyncontentPath + 'table_header@2x.png',
+            CANVAS_IMAGE_HEADER: appGlobals.globals.imgPath + appGlobals.globals.dyncontentPath + 'canvas_header.png',
+            CANVAS_IMAGE_HEADER_2X: appGlobals.globals.imgPath + appGlobals.globals.dyncontentPath + 'canvas_header@2x.png'
+        };
+
+        // This method will reinitialize table flyover data
+        this.reinitializeTableFlyover = function() {
+            // Inintializing default table values
+            $("#add-content-dyn-edit-flyover .table-type").show();
+            var ol = $('.table-type').find('ol');
+            $(ol).html('');
+            for (var i = 1; i < 11; i++) {
+                for (var j = 1; j < 11; j++) {
+                    ol.append('<li class="ui-state-default row-' + i + ' column-' + j + '"></li>');
+                }
+            }
+            $(".selected-row").val("");
+            $(".selected-column").val("");
+            var tableElement = $(".table-type");
+            $(tableElement).find(".width").val('');
+            $(tableElement).find(".top").val('');
+            $(tableElement).find(".left").val('');
+            $(tableElement).find(".bottom").val('');
+            $(tableElement).find("right").val('');
+            $(tableElement).find('.well .demo').colorpicker('setValue', "rgba(0,0,0,0)");
+        };
+
+        // This method will display the layout nav bar
+        this.showLayout = function(layout) {
+            var navigationElement = $('#layout .layout-nav');
+            if (layout.toLowerCase() === 'canvas') {
+                if (appGlobals.globals.isRetina === true) {
+                    $(navigationElement).find('.selected-layout img').attr('src', constants.CANVAS_IMAGE_HEADER_2X);
+                } else {
+                    $(navigationElement).find('.selected-layout img').attr('src', constants.CANVAS_IMAGE_HEADER);
+                }
+                $(navigationElement).find('.selected-layout lable').html('Canvas Layout');
+                $(navigationElement).find('> span:not(.selected-layout)').html('Switch to<br>Table Layout');
+
+            } else if (layout.toLowerCase() === 'table') {
+                if (appGlobals.globals.isRetina === true) {
+                    $(navigationElement).find('.selected-layout img').attr('src', constants.TABLE_IMAGE_HEADER_2X);
+                } else {
+                    $(navigationElement).find('.selected-layout img').attr('src', constants.TABLE_IMAGE_HEADER);
+                }
+                $(navigationElement).find('.selected-layout lable').html('Table Layout');
+                $(navigationElement).find('> span:not(.selected-layout)').html('Switch to<br>Canvas Layout');
+            }
+
+            appGlobals.globals.pubsubQueue.publish("resetPageCanvasHeight", 'show');
+
+            if (layout.toLowerCase() === 'canvas') {
+                appGlobals.globals.pubsubQueue.publish("resetColumn");
+            }
+        };
+
+        // This object contains list of all callbacks
+        var callbacks = {
+            // This method will clear all contents in canvas
+            clbkClearCanvas: function() {
+                var componentId;
+                var newData = {"type": "page-content"};
+                var obj = {"type": "POST", "async": true, "url": appGlobals.globals.appbuilderURL + 'delete-entity'};
+                $($(".body .dyn-table td").get().reverse()).each(function() {
+                    if ($(this).hasClass('smartformTd') === false) {
+                        componentId = $(this).find('> li').attr('id');
+                        newData.entityId = componentId;
+                        obj.data = newData;
+                        appGlobals.globals.ajaxCalling(obj);
+                        $(this).remove();
+                    }
+                });
+                $(".body .dyn-table td.smartformTd").find('i:eq(0)').click();
+
+                $(".body").html('');
+            },
+            // This method will switch layout between canvas and table template
+            clbkSelectLayout: function(event) {
+                var element;
+                var animateElement;
+                if ($(event.target).hasClass('body-wrapper') === true) {
+                    element = $(event.target);
+                } else {
+                    element = $(event.target).parents('.body-wrapper');
+                }
+
+                $("#add-content-dyn-edit-flyover > div").hide();
+                $('#dynamic-setup-edit-flyover').show('slide', {direction: 'right'}, 500);
+                if ($(element).attr('id') === 'canvas-layout') {
+                    animateElement = $("#table-layout");
+                    // For canvas layout
+                    $("#add-content-dyn-edit-flyover .canvas-type").show();
+                } else {
+                    animateElement = $("#canvas-layout");
+                    // Inintializing default table values
+                    self.reinitializeTableFlyover();
+                }
+
+                // Adding animation
+                $(animateElement).fadeOut("slow", function() {
+                    $('.body .body-wrapper').hide();
+                    $('#layout .body').html('');
+                    // Display layout switch tab
+                    if ($(this).attr('id') === "table-layout") {
+                        self.showLayout('canvas');
+                    } else {
+                        self.showLayout('table');
+                    }
+                });
+            },
+            // This method will toggle between canvas and table layout
+            clbkToggleLayout: function() {
+                $("#switch-layout").modal("hide");
+
+                if ($(".layout-nav > span:not(.selected-layout)").html().toLowerCase().indexOf('table') > -1) {
+                    // Switch to table layout
+                    self.showLayout('table');
+
+                    // Enable table grid view
+                    var tableInput = $(".table-type .selected-row, .table-type .selected-column");
+                    $(tableInput).removeAttr('disabled');
+                    $(tableInput).removeClass('noselect');
+                    $('#selectable').selectable('enable');
+
+                    // Close other flyover
+                    $('#dynamic-setup-flyover').hide('slide', {direction: 'right'}, 500);
+                    self.reinitializeTableFlyover();
+                    $("#add-content-dyn-edit-flyover > div").hide();
+                    $("#add-content-dyn-edit-flyover .table-type").show();
+                    $('#dynamic-setup-edit-flyover').show('slide', {direction: 'right'}, 500);
+                    callbacks.clbkClearCanvas();
+                    $(".v-line").remove();
+
+                    // Enable column layout selection
+                    $('#column-count').removeAttr('disabled');
+                } else {
+                    // Switch to canvas layout
+                    self.showLayout('canvas');
+
+                    // Remove all the contents from table
+                    $('#reset-table #reset-table-confirm').click();
+
+                    $("#add-content-dyn-edit-flyover > div").hide();
+                    $("#add-content-dyn-edit-flyover .canvas-type").show();
+                    $('#dynamic-setup-edit-flyover').show('slide', {direction: 'right'}, 500);
+                }
+            },
+            // This method will switch layout between canvas and table
+            clbkSwitchLayout: function() {
+                $('#dynamic-setup-flyover').hide('slide', {direction: 'right'}, 500);
+                if ($(".body .dyn-table-container").length === 0 && $(".body .dyn-table").length === 0) {
+                    $("#switch-layout #toggle-layout").click();
+                    return;
+                }
+                if ($(".layout-nav > span:not(.selected-layout)").html().toLowerCase().indexOf('table') > -1) {
+                    $("#switch-layout h3").html("Switch to Table Layout?");
+                    $("#switch-layout .modal-body p").html("Content within canvas will be lost, would you like to switch to the Table Layout?");
+
+                    // Display confirmation dialogue
+                    $("#switch-layout").modal("show");
+                } else {
+                    $("#switch-layout h3").html("Switch to Canvas Layout?");
+                    $("#switch-layout .modal-body p").html("Content within table will be lost, would you like to switch to the Canvas Layout?");
+
+                    // Display confirmation dialogue
+                    $("#switch-layout").modal("show");
+                }
+            }
+        };
+
+        // This method will bind callbacks to events
+        var registerEvents = function() {
+            $(".canvas-type .clear-canvas").click(callbacks.clbkClearCanvas);
+            $("#layout .body").on("click", "#canvas-layout, #table-layout", callbacks.clbkSelectLayout);
+            $("#switch-layout #toggle-layout").click(callbacks.clbkToggleLayout);
+            $('.layout-nav').on('click', '> span:not(.selected-layout)', callbacks.clbkSwitchLayout);
+        };
+
+        // This is a startup method for paragraph flyover
+        this.init = function() {
+            registerEvents();
+        };
+    };
+
+    return PageLayout;
+});

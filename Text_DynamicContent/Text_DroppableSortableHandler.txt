@@ -1,0 +1,593 @@
+define(function() {
+
+    // Declaring an object that contains all methods table related actions
+    var DroppableSortableHandler = function() {
+        var isSmartFormFlag;
+        var self = this;
+
+        // This method will reset smart height
+        this.resetSmartFormHeight = function() {
+            var isSmartFormExist = $('.dyn-table .smartform').length > 0 ? true : false;
+            var smartFormParent = $('.smartformTd').parents('tr');
+            var smartFormLast = ($(smartFormParent).next().length === 0) ? true : false;
+            if (smartFormLast === false && $(smartFormParent).nextAll().length === 1 &&
+                    $(smartFormParent).next('tr').find('td.ui-sortable-helper').length > 0) {
+                smartFormLast = true;
+            }
+
+            $('.dyn-table .smartformTd').height('');
+
+            if (isSmartFormExist === true && smartFormLast === true) {
+                var smartFormHeight = $('.body').height() - $('.body .dyn-table').height() +
+                        $('.dyn-table .smartformTd').height() - 8;
+                $('.dyn-table .smartformTd').height(smartFormHeight);
+            }
+        };
+
+        // This method will be called on mouse-out of body
+        var bodyMouseOut = function(event) {
+            if ($('.ui-draggable.ui-draggable-dragging').is(':visible') === true) {
+                event.stopPropagation();
+            }
+        };
+
+        // This method will be called on mouse-over of body
+        var bodyMouseOver = function(event) {
+            if ($(event.target).hasClass('body') === true) {
+                $('.dyn-droppable').remove();
+                $('.ui-draggable.ui-draggable-dragging').show();
+                $("#layout .body").on("mouseout", bodyMouseOut);
+            }
+            event.stopPropagation();
+        };
+
+        // This method will  be called on mouse over of component
+        var componentMouseOver = function(event) {
+            var columnCount = parseInt($("#column-count").val());
+            $('.dyn-droppable').remove();
+            $('.ui-draggable.ui-draggable-dragging').hide();
+            var parent = $(this).parents('tr');
+            var type = $('.ui-draggable.ui-draggable-dragging').text();
+            var parentForm;
+            isSmartFormFlag = false;
+            appGlobals.globals.pubsubQueue.publish("setSmartForm", false);
+
+            if (this.tagName.toLowerCase() === "li" && $(this).parents('td').hasClass('smartformTd') === true) {
+                isSmartFormFlag = true;
+                appGlobals.globals.pubsubQueue.publish("setSmartForm", true);
+                parentForm = $(this);
+            }
+
+            if (type.toLowerCase() === 'button') {
+                // Add a new row for button
+                if (isSmartFormFlag) {
+                    $("<li class='dyn-droppable temp-component smart-form-component' style='float:left;'>" + type + "</li>").insertBefore(parentForm);
+                } else {
+                    var newRowHtml = "<tr class='dyn-droppable'><td colspan='" + columnCount + "'><div>" + type + "</div></td></tr>";
+                    $(newRowHtml).insertBefore(parent);
+                }
+            } else {
+                if (isSmartFormFlag) {
+                    $("<li class='dyn-droppable temp-component smart-form-component' style='float:left;'>" + type + "</li>").insertBefore(parentForm);
+                } else {
+                    $("<tr class='dyn-droppable'><td colspan='" + columnCount + "'><div>" + type + "</div></td></tr>").insertBefore(parent);
+                }
+            }
+            $(".dyn-droppable").css('position', 'relative');
+            event.stopPropagation();
+        };
+
+        // This method will be called on droppable's 'over' event
+        var droppableMouseOver = function() {
+            if ($('.table-container').length === 0 ||
+                    $('.ui-draggable.ui-draggable-dragging').attr('type').toLowerCase() !== 'table') {
+                $('.ui-draggable.ui-draggable-dragging').hide();
+                $(".dyn-table .dyn-component").css('z-index', '1000');
+                isSmartFormFlag = false;
+                appGlobals.globals.pubsubQueue.publish("setSmartForm", false);
+
+                // Attach mouseover event
+                $(".dyn-table .dyn-component").bind("mouseover", componentMouseOver);
+                $("#layout .body").bind("mouseover", bodyMouseOver);
+            }
+        };
+
+        // This method will reset droppable placeholder
+        var resetDroppablePlaceholder = function() {
+            $(".dyn-table .dyn-component").unbind("mouseover", componentMouseOver);
+            $("#layout .body").unbind("mouseover", bodyMouseOver);
+            $(".dyn-table .dyn-component").css('background-color', '');
+            $('.ui-draggable.ui-draggable-dragging').show();
+            $(".dyn-table .dyn-component").css('z-index', '');
+        };
+
+        // This method will be called on droppable's 'out' event
+        var droppableMouseOut = function() {
+            resetDroppablePlaceholder();
+            $('.dyn-droppable').remove();
+        };
+
+        // This method will set nav bar
+        var settingPageCanvasNavBar = function() {
+            if ($("#layout .layout-nav").is(':visible') === false) {
+                // Must set to canvas layout, this is the default layout if no layout is selected
+                if ($("#layout .body .body-wrapper").is(":visible") === true) {
+                    $("#layout .body .body-wrapper").hide();
+                }
+                appGlobals.globals.pubsubQueue.publish("showLayout", 'canvas');
+            }
+        };
+
+        var fetchAjaxCount = function() {
+            var maxCount = "1";
+            // Fetch 'data-ajax' value if found any
+            if ($(".body .dyn-table td > li[data-ajax]").length > 0) {
+                $(".body .dyn-table td > li[data-ajax]").each(function() {
+                    var value = $(this).attr("data-ajax");
+                    if (value > maxCount) {
+                        maxCount = value;
+                    }
+                });
+                maxCount = parseInt(maxCount) + 1;
+            }
+
+            return maxCount;
+        };
+
+        var placeButtonComponent = function() {
+            $(".dyn-table td:not(.empty-container) .dyn-button").each(function() {
+                var isNewElement = $(this).parents('tr').hasClass('dyn-droppable');
+                var emptyContainer, buttonRow, emptyContainerRow, parent, buttonMarkup;
+
+                if (isNewElement === true) {
+                    // Replace element
+                    emptyContainer = $('.body .dyn-table td.empty-container:eq(0)');
+
+                    if (emptyContainer.length > 0) {
+                        emptyContainerRow = $(emptyContainer).parents('tr').index();
+                        buttonRow = $(this).parents('tr').index();
+
+                        if (buttonRow > emptyContainerRow) {
+                            buttonMarkup = $(parent).html();
+                            parent = $(this).parents('td');
+
+                            $(emptyContainer).html(buttonMarkup);
+                            $(emptyContainer).removeClass('empty-container');
+                            $(emptyContainer).addClass('dyn-droppable');
+
+                            // Remove the droppable TR tag as well
+                            $(parent).parents('tr').remove();
+                        }
+                    }
+                } else {
+                    var buttonObj = $(this).parent().data('property');
+                    buttonRow = $(this).parents('tr').index();
+                    emptyContainer = $('.body .dyn-table td.empty-container:eq(0)');
+
+                    if (emptyContainer.length > 0) {
+                        emptyContainerRow = $(emptyContainer).parents('tr').index();
+
+                        if (buttonRow >= emptyContainerRow) {
+                            parent = $(this).parents('td');
+                            buttonMarkup = $(parent).html();
+
+                            $(emptyContainer).html(buttonMarkup);
+                            $(emptyContainer).find('li').data('property', buttonObj);
+                            $(emptyContainer).removeClass('empty-container');
+
+                            $(parent).html('');
+                            $(parent).addClass('empty-container');
+                        }
+                    }
+                }
+            });
+        };
+
+        var setTdTemplate = function(element, isSmartFormExist, isButtonComponent) {
+            var columnCount = parseInt($("#column-count").val());
+            var tdTemplate = '';
+            if (isButtonComponent === true) {
+                for (var columnIndex = 0; columnIndex < columnCount; ++columnIndex) {
+                    tdTemplate = tdTemplate + '<td class="empty-container"></td>';
+                }
+                if (isSmartFormExist) {
+                    tdTemplate = element;
+                }
+            } else {
+                tdTemplate = '<td colspan="' + columnCount + '"></td>';
+            }
+
+            if ($(tdTemplate).hasClass('empty-container') === true) {
+                // Specifically for buttons
+                var tempTemplate = '';
+                $(tdTemplate).each(function(index) {
+                    if (index === 0) {
+                        tempTemplate = $(this).removeAttr('class').clone().wrap('<p></p>').html(element).parent().html();
+                    } else {
+                        tempTemplate = tempTemplate + $(this).wrap('<p></p>').parent().html();
+                    }
+                });
+                tdTemplate = tempTemplate;
+            } else {
+                if (isSmartFormExist) {
+                    tdTemplate = element;
+                } else {
+                    tdTemplate = $(tdTemplate).html(element).wrap('<p></p>').parent().html();
+                }
+            }
+
+            if (tdTemplate !== '') {
+                $('.dyn-droppable').html(tdTemplate);
+                $('.dyn-droppable').css({'width': '', 'float': 'none'});
+            }
+
+            if (isButtonComponent === true) {
+                placeButtonComponent();
+            }
+        };
+
+        var dropHandler = function(event, ui) {
+            // Setting up page layout
+            settingPageCanvasNavBar();
+            if ($(".layout-nav .selected-layout lable").html().toLowerCase().indexOf('table') > -1) {
+                return false;
+            }
+
+            $(".dyn-droppable").css('z-index', '');
+            $(".dyn-droppable").css('position', '');
+            resetDroppablePlaceholder();
+
+            var elementArr = [];
+            var element;
+            if ($(ui.draggable.attr("data-markup")).attr("data-type").toLowerCase() === "smartform") {
+                appGlobals.globals.pubsubQueue.publish("setSmartFormName", "Smart Form");
+                $(".component-content .tabular-pane .smartform-content").hide();
+
+                // Disable column layout
+                $('#column-count').attr('disabled', 'disabled');
+            }
+
+            // Remove table as it is empty
+            if ($("#layout .body .dyn-table tr li >").length === 0) {
+                $("#layout .body .dyn-table").remove();
+            }
+
+            element = isSmartFormFlag === true ? ui.draggable.attr("data-markup") :
+                    $("<li class='temp-component'></li>").html(ui.draggable.attr("data-markup"));
+
+            var maxCount = fetchAjaxCount();
+            $(element).attr("data-ajax", maxCount);
+
+            // Fetch all elements with new elements
+            var isComponentInBetween = $('.dyn-droppable').length > 0 ? true : false;
+            if (isComponentInBetween === true) {
+                var isButtonComponent = false;
+                if ($(element).find('.dyn-button').length > 0 || $(element).hasClass('dyn-button') === true) {
+                    isButtonComponent = true;
+                }
+
+                setTdTemplate(element, isSmartFormFlag, isButtonComponent);
+
+                // Updating order as well
+                appGlobals.globals.pubsubQueue.publish("updateAllComponentOrder");
+            } else {
+                elementArr.push(element);
+                appGlobals.globals.pubsubQueue.publish("addElementsEvent", elementArr);
+            }
+
+            // End of placing elements in proper place
+            appGlobals.globals.pubsubQueue.publish("attachEvent");
+
+            $("#hidden-component-id").val(ui.draggable.attr("id"));
+            $("#hidden-component-type").val(ui.draggable.attr("type"));
+            $("#hidden-component-save-id").val('');
+
+            // Re-set column layout
+            appGlobals.globals.pubsubQueue.publish("resetColumn");
+
+            var data = {arg1: undefined, arg2: maxCount};
+            appGlobals.globals.pubsubQueue.publish("savePageComponent", data);
+
+            $('.dyn-droppable').removeClass('dyn-droppable');
+        };
+
+        // This method will attach droppable event on page canvas
+        this.attachDroppableEvent = function() {
+            // Drag-Drop for dynamic page
+            $("#add-content-dyn-flyover > .content-type #all > div").draggable({
+                helper: "clone"
+            });
+
+            $("#layout .body").droppable({
+                accept: ":not(.ui-sortable-helper)",
+                tolerance: 'pointer',
+                over: droppableMouseOver,
+                out: droppableMouseOut,
+                drop: dropHandler
+            });
+        };
+
+        // This method will attach form sortable event on page canvas
+        this.setDynFormEvent = function() {
+            $('.smartform').sortable({
+                items: 'li',
+                stop: function() {
+                    // Do all the processing like UI and maintaining order
+                    $('.ui-dyn-placeholder').remove();
+                    appGlobals.globals.pubsubQueue.publish("setSmartFormValue", true);
+                    $(".component-content .tabular-pane .smartform-content").hide();
+                    if (($(".smartformTd ul li").first().hasClass('dyn-component')) &&
+                            ($(".smartformTd ul li").last().hasClass('dyn-component')) && (!$(".smartformTd ul").find('td').children().hasClass('dyn-component'))) {
+                        self.setDynFormEvent();
+
+                        // Re-set column layout
+                        appGlobals.globals.pubsubQueue.publish("resetColumn");
+
+                        // Update all component's order
+                        appGlobals.globals.pubsubQueue.publish("updateAllComponentOrder");
+                    } else {
+                        return false;
+                    }
+                },
+                start: function(event, ui) {
+                    var width = ui.item.parent().width();
+                    ui.item.width(width + "px");
+                },
+                change: function() {
+                    $('.ui-dyn-placeholder').remove();
+                    $('.ui-sortable-placeholder').hide();
+
+                    var index = $('.smartform .ui-sortable-placeholder').index();
+                    var parent = $('.smartform .ui-sortable-placeholder').prev('li');
+                    var data = $('.ui-sortable-helper').text();
+                    var html = $('<li class="ui-dyn-placeholder dyn-component form-element">' + data + '</li>');
+
+                    if (index === 0) {
+                        $(html).insertBefore(parent);
+                    } else {
+                        $(html).insertAfter(parent);
+                    }
+                    $('.smartform .ui-dyn-placeholder').css('background-color', '#CCCCCC');
+                    $('.smartform .ui-dyn-placeholder').css('height', '27px');
+                }
+            });
+            $(".smartform").disableSelection();
+        };
+
+        // This method will re-arrange canvas components
+        var reArrangeCanvas = function(elementArr, objArr) {
+            $(".body .dyn-table").remove();
+
+            // Generating markup
+            var componentData = {};
+            componentData.elementList = elementArr;
+            componentData.objArr = objArr;
+            appGlobals.globals.pubsubQueue.publish("moveToOuterLayout", componentData);
+
+            self.setDynamicEvent();
+
+            // Re-set column layout
+            appGlobals.globals.pubsubQueue.publish("resetColumn");
+
+            // Update all component's order
+            appGlobals.globals.pubsubQueue.publish("updateAllComponentOrder");
+        };
+
+        // This method holds sorting logic of smart form
+        var sortSmartForm = function() {
+            var elementArr = [];
+            var objArr = [];
+
+            $(".dyn-table tbody td .temp-component").each(function() {
+                var html = $(this);
+                var obj = $(this).data('property');
+                var container = $(this).parents('tr');
+
+                if (obj) {
+                    if ($(container).children('td').length < 2 && $(container).find('ul').hasClass('smartform')) {
+                        var notFormelement = $(this).children().attr('data-type');
+                        if (notFormelement && notFormelement !== "formelement") {
+                            $(this).addClass('form-element smart-form-component');
+                        }
+                    }
+                    elementArr.push(html);
+                    objArr.push(obj);
+                }
+            });
+
+            reArrangeCanvas(elementArr, objArr);
+        };
+
+        // This method will be called when stop method of sortable is triggered
+        var dynTableSortableStopHandler = function() {
+            // Do all the processing like UI and maintaining order
+            $('.ui-dyn-placeholder').remove();
+            if ($(".dyn-table tbody").find('ul').hasClass('smartform')) {
+
+                appGlobals.globals.pubsubQueue.publish("setSmartFormValue", true);
+                $(".component-content .tabular-pane .smartform-content").hide();
+
+                var smartFormContainer = $(".smartformTd ul");
+
+                if (($(smartFormContainer).find("li").first().hasClass('dyn-component')) &&
+                        ($(smartFormContainer).find("li").last().hasClass('dyn-component')) &&
+                        (!$(smartFormContainer).find('td').children().hasClass('dyn-component'))) {
+
+                    sortSmartForm();
+
+                } else {
+                    return false;
+                }
+            } else {
+                var elementArr = [];
+                var objArr = [];
+                $(".dyn-table tbody td .temp-component").each(function() {
+                    var html = $(this);
+                    var obj = $(this).data('property');
+                    appGlobals.globals.pubsubQueue.publish("setSmartFormValue", false);
+                    $(".component-content .tabular-pane .smartform-content").show();
+
+                    if (obj) {
+                        elementArr.push(html);
+                        objArr.push(obj);
+                    }
+                });
+
+                reArrangeCanvas(elementArr, objArr);
+            }
+        };
+
+        // This method will be called when change method of sortable is triggered
+        var dynTableSortableChangeHandler = function() {
+            $('.ui-dyn-placeholder').remove();
+            $('.ui-sortable-placeholder').hide();
+
+            var index = $('.ui-sortable-placeholder').index();
+            var parent = $('.ui-sortable-placeholder').parents('tr');
+            var data = $('.ui-sortable-helper div').text();
+            var html, parentForm;
+
+            isSmartFormFlag = false;
+            appGlobals.globals.pubsubQueue.publish("setSmartForm", false);
+
+            if (parent.find('td').hasClass('smartformTd') && parent.find('> td').length === 1) {
+                isSmartFormFlag = true;
+                appGlobals.globals.pubsubQueue.publish("setSmartForm", true);
+                parentForm = $('.smartform .ui-sortable-placeholder').prev('li');
+
+                html = $("<li class='ui-dyn-placeholder dyn-component temp-component smart-form-component'>" + data + "</li>");
+            } else {
+                html = $('<td class="ui-dyn-placeholder dyn-component"><div>' + data + '</div></td>');
+            }
+
+            var isFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
+            if (index === 0) {
+                if (isSmartFormFlag) {
+                    $(html).insertAfter(parentForm);
+                    if (isFirefox) {
+                        $('.ui-dyn-placeholder').css('width', parentForm.width() - 12 + 'px');
+                    }
+                } else {
+                    $(html).insertBefore(parent);
+                }
+            } else {
+                if (isSmartFormFlag) {
+                    $(html).insertAfter(parentForm);
+                    if (isFirefox) {
+                        $('.ui-dyn-placeholder').css('width', parentForm.width() - 12 + 'px');
+                    }
+                } else {
+                    $(html).insertAfter(parent);
+                }
+            }
+
+            $('.ui-dyn-placeholder').css('background-color', '#CCCCCC');
+            $('.ui-dyn-placeholder').css('height', '27px');
+
+            self.resetSmartFormHeight();
+
+            if (($(".ui-dyn-placeholder").parent()[0]) && ($(".ui-dyn-placeholder").parent()[0].tagName.toLowerCase() === "tbody")) {
+                $(".ui-dyn-placeholder").css('width', '97%');
+            } else {
+                $(".ui-dyn-placeholder").css('width', '');
+            }
+        };
+
+        // This method will be called when stop method of sortable is triggered
+        var dynTableContainerSortableStopHandler = function(event, ui) {
+            var newParent = $($(ui.item)).parent();
+            var previousElement = $(newParent).find('li:not(.original-element)');
+            var originalParent = $(".dyn-table-container .original-parent");
+
+            $(ui.item).show();
+            $(".dyn-table-container .original-parent").removeClass('original-parent');
+            $(".dyn-table-container .original-element").removeClass('original-element');
+            $(".body .dyn-table-container td").css("background", "");
+
+            if (newParent.attr("id") === originalParent.attr("id")) {
+                // No swapping just return
+                return false;
+            }
+
+            $(previousElement).insertBefore($(originalParent).find('.dyn-lable-cell'));
+
+            var NewParentIsEmpty = $(newParent).hasClass('empty-container') === true ? true : false;
+            $(newParent).removeClass('empty-container');
+            if (NewParentIsEmpty === true) {
+                $(originalParent).addClass('empty-container');
+            } else {
+                $(originalParent).removeClass('empty-container');
+            }
+
+            // Attach droppable element
+            appGlobals.globals.pubsubQueue.publish("attachDroppableEvent");
+
+            // API calling to update position of element as well
+            var newParentId = newParent.attr("id");
+            var oldComponentObject = newParent.find('>li').data('property');
+            newParent.find('>li').data('data-parent', newParentId);
+            oldComponentObject.parentItem = newParentId;
+            newParent.find('>li').data('property', oldComponentObject);
+
+            // Updating component
+            appGlobals.globals.pubsubQueue.publish("updateComponent", oldComponentObject);
+
+            if (originalParent.hasClass('empty-container') === false) {
+                newParentId = originalParent.attr("id");
+                oldComponentObject = originalParent.find('>li').data('property');
+                originalParent.find('>li').data('data-parent', newParentId);
+
+                oldComponentObject.parentItem = newParentId;
+                originalParent.find('>li').data('property', oldComponentObject);
+
+                // Updating component
+                appGlobals.globals.pubsubQueue.publish("updateComponent", oldComponentObject);
+            }
+        };
+
+        // This method will attach sortable events of all components in page canvas exclude smart form
+        this.setDynamicEvent = function() {
+            var hasTable = $(".dyn-table-container").length > 0 ? true : false;
+            if (hasTable === false) {
+                if ($(".body tbody").hasClass('ui-sortable') === true) {
+                    $(".body tbody").sortable("destroy");
+                }
+
+                $(".body .dyn-table tbody").sortable({
+                    items: 'td',
+                    cancel: '.formTd,.smartformTd',
+                    connectWith: '.smartform, .dyn-table tbody tr',
+                    stop: dynTableSortableStopHandler,
+                    start: function(event, ui) {
+                        var width = ui.item.parent().width();
+                        ui.item.width(width + "px");
+                    },
+                    change: dynTableSortableChangeHandler
+                });
+            } else {
+                if ($(".body .dyn-table").hasClass('ui-sortable') === true) {
+                    $(".body .dyn-table").sortable("destroy");
+                }
+
+                $(".body .dyn-table-container").sortable({
+                    items: 'li',
+                    stop: dynTableContainerSortableStopHandler,
+                    start: function(event, ui) {
+                        if (ui.placeholder.parent().hasClass('empty-container') === true) {
+                            return false;
+                        }
+                        $(ui.helper).parent().addClass('original-parent');
+                        $(ui.helper).addClass('original-element');
+                    },
+                    change: function() {
+                        $(".ui-sortable-placeholder").hide();
+                        $(".body .dyn-table-container td").css("background", "");
+                        $(".ui-sortable-placeholder").parent("td").css("background", "#cccccc");
+                    }
+                }).disableSelection();
+            }
+        };
+    };
+
+    return DroppableSortableHandler;
+});

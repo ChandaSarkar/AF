@@ -1,0 +1,71 @@
+define(function() {
+    "use strict";
+
+    var appId = $('input[name=session-app-id]').val();
+    var isRetina = window.isRetina();
+
+    // This method will check high retina resolution
+    function isRetina() {
+        var matchStr = 'only screen and (min-resolution: 192dpi), only screen and (min-resolution: 2dppx), only screen and (min-resolution: 75.6dpcm)';
+        var matchMediaStr = 'only screen and (-webkit-min-device-pixel-ratio: 2), only screen and (-o-min-device-pixel-ratio: 2/1), only screen and (min--moz-device-pixel-ratio: 2), only screen and (min-device-pixel-ratio: 2)';
+        return ((window.matchMedia && (window.matchMedia(matchStr).matches || window.matchMedia(matchMediaStr).matches)) || (window.devicePixelRatio && window.devicePixelRatio >= 2)) && /(iPad|iPhone|iPod)/g.test(navigator.userAgent);
+    }
+
+    // This method will toggle between retina and normal images
+    var updateRetinaImageName = function(element) {
+        var src = $(element).attr("src");
+        var retinaSrc = src.replace("@2x", "");
+        retinaSrc = retinaSrc.replace(".png", "@2x.png");
+        $(element).attr("src", retinaSrc);
+    };
+
+    // This global method is used to display error message or notice
+    var errorMessage = function(errorMsg) {
+        var flashError = new FlashBang();
+        flashError.msg = errorMsg;
+        flashError.createError();
+
+        return;
+    };
+
+    // This method will iterate through properties to give appropriate property value
+    var fetchPropertyIndex = function(propertyArr, propertyName) {
+        var indexPosition = "";
+        for (var index = 0; index < propertyArr.length; ++index) {
+            if (propertyArr[index].name.toLowerCase() === propertyName.toLowerCase()) {
+                indexPosition = index;
+            }
+        }
+        return indexPosition;
+    };
+
+    // This global method will register publisher and subscriber
+    var globalsObj = {
+        publish: function(eventName, data) {
+            $.Deferred().done($.Topic(eventName).publish).resolve(data);
+        },
+        subscribe: function(eventName, callback) {
+            $.Topic(eventName).subscribe(callback);
+        }
+    };
+
+    return {
+        sessionAppId: appId,
+        appsPath: "",
+        coreImgPath: '../bundles/phunwaremaascore/img/',
+        jsPath: "../bundles/phunwaremaasvscportal/js/",
+        imgPath: "../bundles/phunwaremaasvscportal/img/",
+        libsPath: "lib/",
+        assetPath: "Asset/",
+        publishingPath: "Publishing/",
+        dyncontentPath: "DynamicContent/",
+        assetURL: "assetmanager/",
+        publishingURL: "publisher/",
+        appbuilderURL: "appbuilder/",
+        errorMessage: errorMessage,
+        fetchPropertyIndex: fetchPropertyIndex,
+        pubsubQueue: globalsObj,
+        isRetina: isRetina,
+        updateRetinaImageName: updateRetinaImageName
+    };
+});

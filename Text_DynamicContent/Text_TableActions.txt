@@ -1,0 +1,437 @@
+define(function() {
+
+    // Declaring an object that contains all methods table related actions
+    var TableActions = function() {
+        // This method will set row background color
+        var setRowBackground = function(response) {
+            var src = response.url;
+            var imageId = response.id;
+            var rowElement = $('.rows-type .row-img-display');
+            $(rowElement).addClass('img-added');
+            $(rowElement).find('img').css('display', 'block');
+            $(rowElement).find('img').attr("src", src);
+            $(rowElement).find('img').attr("data-id", imageId);
+        };
+
+        // This method will find if cells are sequential
+        var areCellsSequential = function() {
+            var selectedCells = $(".dyn-table-container td.selected-table-column");
+            var previousIndex = -1;
+            var cellsAreSequential = true;
+
+            if (selectedCells.length > 2) {
+                cellsAreSequential = false;
+            } else {
+                $(selectedCells).each(function() {
+                    if (previousIndex === -1) {
+                        previousIndex = $(this).index();
+                        return;
+                    }
+                    var expectedIndex = previousIndex + 1;
+                    if (expectedIndex !== $(this).index()) {
+                        cellsAreSequential = false;
+                        return false;
+                    } else {
+                        ++previousIndex;
+                    }
+                });
+            }
+            return cellsAreSequential;
+        };
+
+        // This method will reset background color in row flyover
+        var setBackgroundColor = function(data) {
+            if (data) {
+                var hexToRgb = appGlobals.globals.convertHexToRgb(data);
+                $('.rows-type .well .demo').colorpicker('setValue', hexToRgb);
+            }
+        };
+
+        // This method will set value to row flyover
+        var setRowInformation = function() {
+            // Show object information
+            var appVersion = $("#application-name .selected-name").attr("value");
+            var rowObject = $("#layout .body .selected-table-row").nextAll('table:eq(0)').data('property');
+            var rowObjPropLength = rowObject.properties.length;
+            $('.rows-type .well .demo').colorpicker('setValue', 'rgba(0,0,0,0)');
+
+            var rowElement = $(".rows-type");
+            for (var index = 0; index < rowObjPropLength; ++index) {
+                var propertyValue = rowObject.properties[index].value;
+
+                switch (rowObject.properties[index].name.toLowerCase()) {
+                    case "insets":
+                        var insets = propertyValue.split(',');
+                        $(rowElement).find(".top").val(insets[0]);
+                        $(rowElement).find(".left").val(insets[1]);
+                        $(rowElement).find(".bottom").val(insets[2]);
+                        $(rowElement).find(".right").val(insets[3]);
+                        break;
+
+                    case "height":
+                        $(rowElement).find(".height").val(propertyValue);
+                        break;
+
+                    case "backgroundcolor":
+                        if (parseInt(appVersion) >= 4) {
+                            setBackgroundColor(propertyValue);
+                        }
+                        break;
+
+                    case "textcolor":
+                        if (parseInt(appVersion) <= 3) {
+                            setBackgroundColor(propertyValue);
+                        }
+                        break;
+
+                    default:
+                        break;
+
+                }
+            }
+
+            if (rowObject.imageId) {
+                var obj = {};
+                obj.type = "GET";
+                obj.async = true;
+                obj.url = appGlobals.globals.assetURL + "get-file-info";
+                obj.data = {"file": rowObject.imageId};
+                appGlobals.globals.ajaxCalling(obj, setRowBackground);
+            } else {
+                var rowComponent = $('.rows-type .row-img-display');
+                $(rowComponent).removeClass('img-added');
+                $(rowComponent).find('img').css('display', 'none');
+                $(rowComponent).find('img').attr("src", '');
+                $(rowComponent).find('img').attr("data-id", '');
+            }
+        };
+
+        var setColumnInformation = function(columnId) {
+            // Show object information
+            var columnObject = $("#" + columnId).data('property');
+            var columnElement = $('.columns-type');
+            $(columnElement).find('.well .demo').colorpicker('setValue', "rgba(0,0,0,0)");
+            if (!columnObject) {
+                return;
+            }
+
+            var colObjPropLength = columnObject.properties.length;
+            for (var index = 0; index < colObjPropLength; ++index) {
+                var propertyName = columnObject.properties[index].name.toLowerCase();
+                var propertyValue = columnObject.properties[index].value;
+                if (propertyName === "width") {
+                    $(columnElement).find(".width").val(propertyValue);
+                } else if (propertyName === "insets") {
+                    var value = propertyValue.split(",");
+                    var insetsElement = $(columnElement).find('.inset');
+                    $(insetsElement).find(".top:visible").val(value[0]);
+                    $(insetsElement).find(".left:visible").val(value[1]);
+                    $(insetsElement).find(".bottom:visible").val(value[2]);
+                    $(insetsElement).find(".right:visible").val(value[3]);
+                }
+            }
+        };
+
+        // This object contains list of all callbacks
+        var callbacks = {
+            // This method will show/hide row flyover
+            clbkToggleRowFlyover: function(event) {
+                event.stopPropagation();
+                if ($(this).hasClass('selected-table-row') === true) {
+                    $(this).removeClass('selected-table-row');
+                    $(this).nextAll('.dyn-add-row:eq(0)').hide();
+                    $(this).hide();
+
+                    // Hide row flyover
+                    $('#dynamic-setup-edit-flyover').hide('slide', {direction: 'right'}, 500);
+                    $("#add-content-dyn-edit-flyover > div").hide();
+                    return false;
+                }
+
+                $('#dynamic-setup-edit-flyover').show('slide', {direction: 'right'}, 500);
+                $("#add-content-dyn-edit-flyover > div").hide();
+                $("#add-content-dyn-edit-flyover .rows-type").show();
+
+                // Resetting delete rows button height
+                var flyoverHeight = $('.rows-type .component-content').height();
+                var componentHeight = 0;
+                $('.rows-type .component-content').children().each(function() {
+                    if ($(this).hasClass('center') === true) {
+                        componentHeight = componentHeight + $(this).outerHeight();
+                    } else {
+                        componentHeight = componentHeight + $(this).outerHeight(true);
+                    }
+                });
+                $('.rows-type .component-content > .center').css('margin-top', (flyoverHeight - componentHeight - 10) + "px");
+
+                $(".dyn-table-container .selected-table-column").removeClass('selected-table-column');
+                $(".dyn-table-container .selected-table-row").removeClass("selected-table-row");
+                $('.dyn-lable-row, .dyn-add-row').hide();
+                $(this).addClass("selected-table-row");
+                $(this).show();
+                $(this).nextAll('.dyn-add-row:eq(0)').show();
+
+                setRowInformation();
+            },
+            // This method will show/hide column flyover
+            clbkToggleColumnFlyover: function(event) {
+                event.stopPropagation();
+                // Resetting previously selected row
+                $('.dyn-table-container .selected-table-row').removeClass('selected-table-row');
+
+                // Check if cell exist in some other row, if yes, then de-select that cell(s)
+                var selectedCells = $('.dyn-table-container .selected-table-column');
+                if (selectedCells.length > 0) {
+                    var parentRow = $(this).parents('table').attr('id');
+                    $(selectedCells).parents('table.dyn-table-row:not([id="' + parentRow + '"])').find('.selected-table-column').removeClass('selected-table-column');
+                }
+
+                if ($(this).hasClass('selected-table-column') === true) {
+                    $(this).removeClass('selected-table-column');
+                } else {
+                    $(this).addClass('selected-table-column');
+                    var cellsSequential = areCellsSequential();
+                    if (cellsSequential === false) {
+                        $(this).removeClass('selected-table-column');
+                    }
+                }
+
+                $('.dyn-lable-row, .dyn-add-row').hide();
+                var slectedColumn = $('.selected-table-column').length;
+                if (slectedColumn === 0) {
+                    // Close flyover
+                    $('#dynamic-setup-edit-flyover').hide('slide', {direction: 'right'}, 500);
+                    $("#add-content-dyn-edit-flyover > div").hide();
+                } else {
+                    // Show flyover
+                    $('#dynamic-setup-edit-flyover').show('slide', {direction: 'right'}, 500);
+                    $("#add-content-dyn-edit-flyover > div").hide();
+                    $("#add-content-dyn-edit-flyover .columns-type").show();
+                    if (slectedColumn === 1) {
+                        $('.columns-type .delete-cell').html('Delete Cell');
+                        $('.columns-type .flyover-header').html('Cell');
+                        $('.columns-type .multiple-cell').hide();
+                        $('.columns-type .single-cell').show();
+
+                        // Show row-label of selected cell
+                        var rowLabelElement = $(this).parents('table').prevAll('.dyn-lable-row:eq(0)');
+                        $(rowLabelElement).show();
+                    } else {
+                        $('.columns-type .delete-cell').html('Delete Cells');
+                        $('.columns-type .flyover-header').html('Cells');
+                        $('.columns-type .multiple-cell').show();
+                        $('.columns-type .single-cell').hide();
+                    }
+                }
+
+                var columnId;
+                if (this.tagName === "TD") {
+                    columnId = $('.selected-table-column:eq(0)').attr('id');
+                }
+                $(".columns-type").attr("selected-column", columnId);
+
+                setColumnInformation(columnId);
+            },
+            // This method will split cell
+            clbkSplitCell: function(response) {
+                var cells = $(".dyn-table-container td.selected-table-column");
+                if (response.type === 'click') {
+                    if (cells.length === 1) {
+                        // Check if cell has element in it
+                        var cellType = appGlobals.globals.ContentType.tablecolumn.id;
+                        var rowId = $(cells).parents("table.dyn-table-row").attr('id');
+                        var newCellObj = {type: cellType, title: "Cell", parentItem: rowId};
+                        var appId = $("#application-name").attr("data-id");
+                        var pageId = $("#hidden-page-id").val();
+                        var newIndex = $(cells).index() + 1;
+                        newCellObj.properties = [];
+                        newCellObj.properties.push({
+                            name: "Index",
+                            value: "" + newIndex
+                        });
+
+                        // Create the component
+                        var postObj = {};
+                        postObj.type = "POST";
+                        postObj.async = true;
+                        postObj.dataType = 'json';
+                        postObj.data = {"type": 'page-content', 'appId': appId, 'pageId': pageId, 'info': JSON.stringify(newCellObj)};
+                        postObj.url = appGlobals.globals.appbuilderURL + 'add-entity';
+                        appGlobals.globals.ajaxCalling(postObj, callbacks.clbkSplitCell);
+
+                        var cellTemplate = $("#custom-cell-template").html();
+                        Mustache.tags = ['{|', '|}'];
+                        var cellMarkup = Mustache.render($.trim(cellTemplate), {columnIndex: newIndex + 1});
+
+                        $(cells).after(cellMarkup);
+
+                        // Attach sortable event
+                        appGlobals.globals.pubsubQueue.publish("attachDroppableEvent");
+                    }
+                } else {
+                    // Here actual response is recieved
+                    var propertiesArray = response.properties;
+                    var cellIndex = appGlobals.globals.findIndexOfElement(propertiesArray, "Index");
+                    var element = $('.dyn-table-container #' + response.parentItem + ' td:eq(' + cellIndex + ')');
+                    $(element).attr("id", response.id);
+                    $(element).attr("data-parent", response.parentItem);
+                    $(element).data('property', response);
+
+                    // Re-setting components
+                    $(".dyn-table-container .selected-table-column").removeClass("selected-table-column");
+                    $(".dyn-table-container .selected-table-row").removeClass('selected-table-row');
+                    $('.dyn-lable-row:visible, .dyn-add-row:visible').hide();
+
+                    // Close flyover
+                    $('#dynamic-setup-edit-flyover').hide('slide', {direction: 'right'}, 500);
+                    $("#add-content-dyn-edit-flyover > div").hide();
+
+                    // Updating index position
+                    $("#" + response.parentItem).find('td').each(function(index) {
+                        var obj = $(this).data('property');
+                        var indexPosition = appGlobals.globals.findIndexOfElement(obj.properties, "Index");
+
+                        if (index.toString() === indexPosition.toString()) {
+                            return;
+                        }
+
+                        // Give API call to update the index position
+                        var objPropLength = obj.properties.length;
+                        for (var innerIndex = 0; innerIndex < objPropLength; ++innerIndex) {
+                            if (obj.properties[innerIndex].name.toLowerCase() === "index") {
+                                obj.properties[innerIndex].value = index.toString();
+                                break;
+                            }
+                        }
+                        $(this).data("property", obj);
+                        // Updating component
+                        appGlobals.globals.pubsubQueue.publish("updateComponent", obj);
+                    });
+
+                    appGlobals.globals.pubsubQueue.publish("attachEvent");
+                    var rowList = $('.body .dyn-table-container tr');
+                    var rowHeight = $("#layout .body").height() / rowList.length;
+                    rowHeight = rowHeight - 1;
+                    var rowLableHeight = rowHeight - $(".body .dyn-table-container .dyn-lable-row").height() - 1;
+                    $(".body .dyn-table-container .dyn-table-row").height(rowHeight);
+                    $(".body .dyn-table-container .dyn-lable-row").css('margin-top', rowLableHeight + 'px');
+                    $(".body .dyn-table-container .dyn-add-row").css('margin-top', rowLableHeight + 'px');
+                    var cellHeight = $(".body .dyn-table-container td").height();
+                    $(".body .dyn-table-container td > li").height(cellHeight);
+                }
+            },
+            // This method will merger cells
+            clbkMergeCell: function() {
+                $('#merge-cells').modal('hide');
+                var selectedCells = $(".dyn-table-container td.selected-table-column");
+                var occupiedCellCount = $(".dyn-table-container td.selected-table-column:not(.empty-container)").length;
+                var rowId;
+
+                rowId = $(selectedCells[0]).parents("table").attr('id');
+
+                // Check if cells are sequential
+                var elementArr = [];
+                $(selectedCells).each(function() {
+                    var cellId = $(this).attr('id');
+                    elementArr.push(cellId);
+                });
+
+                // Pop last element if all cells are empty
+                var deleteAll = false;
+                if (occupiedCellCount === 0) {
+                    elementArr.pop();
+                    deleteAll = true;
+                }
+
+                var newData = {"type": "page-content"};
+                var obj = {"type": "POST", "async": true, "url": appGlobals.globals.appbuilderURL + 'delete-entity'};
+                var persistingCellFound = false;
+                var mergeElementArrLength = elementArr.length;
+
+                // API calling to remove cells
+                for (var elementIndex = 0; elementIndex < mergeElementArrLength; ++elementIndex) {
+                    newData.entityId = elementArr[elementIndex];
+                    obj.data = newData;
+                    if (deleteAll === true) {
+                        // Meaning all cells are empty
+                        appGlobals.globals.ajaxCalling(obj);
+                        $(".dyn-table-container td#" + elementArr[elementIndex]).remove();
+                    } else {
+                        // Few cell may have element into it
+                        var isCellEmpty = $("#" + elementArr[elementIndex]).hasClass('empty-container') === true ? true : false;
+                        if (isCellEmpty === true) {
+                            // Delete that cell
+                            appGlobals.globals.ajaxCalling(obj);
+                            $(".dyn-table-container td#" + elementArr[elementIndex]).remove();
+                        } else {
+                            if (persistingCellFound === false) {
+                                // Dont do any thing
+                                persistingCellFound = true;
+                            } else {
+                                // Delete component from cell
+                                var componentId = $("#" + elementArr[elementIndex]).find('> li').attr('id');
+                                var componentData = {"type": "page-content", "entityId": componentId};
+                                obj.data = componentData;
+                                appGlobals.globals.ajaxCalling(obj);
+
+                                // Deleting cell
+                                obj.data = newData;
+                                appGlobals.globals.ajaxCalling(obj);
+                                $(".dyn-table-container td#" + elementArr[elementIndex]).remove();
+                            }
+                        }
+                    }
+                }
+
+                // Updating index of cells
+                $("#" + rowId).find("td").each(function(index) {
+                    var obj = $(this).data("property");
+                    var indexPosition = appGlobals.globals.findIndexOfElement(obj.properties, "Index");
+
+                    if (index.toString() !== indexPosition) {
+                        // Give API call to update the index position
+                        var propertyIndex = appGlobals.globals.fetchPropertyIndex(obj.properties, "Index");
+                        obj.properties[propertyIndex].value = index.toString();
+                        $(this).data("property", obj);
+                        appGlobals.globals.pubsubQueue.publish("updateComponent", obj);
+                    }
+                });
+
+                $(".dyn-table-container td.selected-table-column").removeClass("selected-table-column");
+                $(".dyn-table-container .selected-table-row").removeClass('selected-table-row');
+                $('.dyn-lable-row:visible, .dyn-add-row:visible').hide();
+
+                $('#dynamic-setup-edit-flyover').hide('slide', {direction: 'right'}, 500);
+                $("#add-content-dyn-edit-flyover > div").hide();
+
+                // Attach sortable event
+                appGlobals.globals.pubsubQueue.publish("attachEvent");
+            },
+            // This method will display merging confirmation box
+            clbkDisplayMergeConfirmationModal: function() {
+                var mergeCells = $(".dyn-table-container .selected-table-column:not(.empty-container)");
+                if (mergeCells.length === 2) {
+                    $('#merge-cells').modal('show');
+                } else {
+                    callbacks.clbkMergeCell();
+                }
+            }
+        };
+
+        // This method will bind callbacks to events
+        var registerEvents = function() {
+            $(".body").on("click", ".dyn-lable-row", callbacks.clbkToggleRowFlyover);
+            $(".body").on("click", ".dyn-table-container td", callbacks.clbkToggleColumnFlyover);
+            $(".columns-type .merge-cell").click(callbacks.clbkDisplayMergeConfirmationModal);
+            $(".columns-type .split-cell").click(callbacks.clbkSplitCell);
+            $("#merge-cells #merge-confirm").click(callbacks.clbkMergeCell);
+        };
+
+        // This is a startup method for paragraph flyover
+        this.init = function() {
+            registerEvents();
+        };
+    };
+
+    return TableActions;
+});

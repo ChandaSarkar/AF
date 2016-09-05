@@ -1,0 +1,832 @@
+define(function() {
+
+    // Declaring an object that contains all methods for Table flyover
+    var TableComponentFlyover = function() {
+        // This object contains list of all callbacks
+        var colNo = 0;
+        var rowNo = 0;
+        var self = this;
+
+        // This method will attach property to specific rows and cells
+        var attachProperty = function(response, obj) {
+            var parent = $("#" + response.parentItem);
+            var indexPosition = appGlobals.globals.findIndexOfElement(response.properties, "Index");
+            var element;
+            var isRowAdded = false;
+            if (parent[0].tagName.toLowerCase() === "table") {
+                // For cells
+                element = $(parent).find("td:eq(" + indexPosition + ")");
+            } else {
+                // For rows
+                element = $(parent).find(".dyn-table-row:eq(" + indexPosition + ")");
+                isRowAdded = true;
+            }
+
+            $(element).attr("id", response.id);
+            $(element).data('property', response);
+            if (isRowAdded === true) {
+                // API calling to add cells
+                var cellCount = obj.cellCount;
+                addCells(cellCount, response.id);
+            } else {
+                // Attach droppable event
+                appGlobals.globals.pubsubQueue.publish("attachDroppableEvent");
+                appGlobals.globals.pubsubQueue.publish("attachEvent");
+            }
+        };
+
+        // This method will add new cells in table with mentioned parentId
+        var addCells = function(cellCount, parentRowId) {
+            var appId = $("#application-name").attr("data-id");
+            var pageId = $("#hidden-page-id").val();
+            var parent = $(".body .dyn-table-row#" + parentRowId);
+            var cellType = appGlobals.globals.ContentType.tablecolumn.id;
+            var newCellObj = {
+                type: cellType,
+                title: "Cell",
+                parentItem: parentRowId
+            };
+
+            var cellTemplate = $("#custom-cell-template").html();
+            cellTemplate = cellTemplate.replace('td', 'td data-parent="' + parentRowId + '"');
+            var expectedIndex = $(parent).find("td").length;
+            for (var index = 0; index < cellCount; ++index) {
+                var newTemplate = cellTemplate;
+                newTemplate = newTemplate.replace("{|columnIndex|}", expectedIndex + 1);
+                $(parent).find("tr").append(newTemplate);
+
+                // API calling to add cell
+                newCellObj.properties = [];
+                newCellObj.properties.push({
+                    name: "Index",
+                    value: "" + expectedIndex
+                });
+
+                var postObj = {};
+                postObj.type = "POST";
+                postObj.async = true;
+                postObj.dataType = 'json';
+                postObj.data = {"type": 'page-content', 'appId': appId, 'pageId': pageId, 'info': JSON.stringify(newCellObj)};
+                postObj.url = appGlobals.globals.appbuilderURL + 'add-entity';
+                appGlobals.globals.ajaxCalling(postObj, attachProperty);
+                ++expectedIndex;
+            }
+
+            // Setting up cell height
+            $(".body .dyn-table-container td > li").height('0px');
+            var cellHeight = $(".body .dyn-table-container td").height();
+            $(".body .dyn-table-container td > li").height(cellHeight);
+
+            $(".body .dyn-table-container .selected-table-row").removeClass('selected-table-row');
+            $(".dyn-lable-row:visible, .dyn-add-row:visible").hide();
+        };
+
+        // This method will add rows in table
+        var addRows = function(count, cellCount) {
+            var rowTemplate = $.trim($("#custom-table-template").html());
+            var rowCount = $(".body .dyn-table-container .dyn-table-row").length;
+
+            // Declaring object related to API calling
+            var appId = $("#application-name").attr("data-id");
+            var pageId = $("#hidden-page-id").val();
+            var rowType = appGlobals.globals.ContentType.tablerow.id;
+            var parentTableId = $('.body .dyn-table-container').attr('id');
+            var newRowObj = {
+                type: rowType,
+                title: "Row",
+                parentItem: parentTableId
+            };
+            var postObj = {};
+            postObj.type = "POST";
+            postObj.async = true;
+            postObj.dataType = 'json';
+            postObj.ajaxComponent = {"cellCount": cellCount};
+            postObj.url = appGlobals.globals.appbuilderURL + 'add-entity';
+
+            rowTemplate = rowTemplate.replace('{|tdTemplate|}', '');
+            rowTemplate = rowTemplate.replace('table ', 'table data-parent="' + parentTableId + '" ');
+            for (var rowIndex = 0; rowIndex < count; ++rowIndex) {
+                var html = rowTemplate.replace('{|rowIndex|}', rowCount + 1);
+                $(".body .dyn-table-container").append(html);
+                // API Calling to add row
+                newRowObj.properties = [];
+                newRowObj.properties.push({
+                    name: "Index",
+                    value: "" + rowCount
+                });
+                postObj.data = {"type": 'page-content', 'appId': appId, 'pageId': pageId, 'info': JSON.stringify(newRowObj)};
+                appGlobals.globals.ajaxCalling(postObj, attachProperty);
+                ++rowCount;
+            }
+
+            // Setting up table row height
+            var rowLength = $(".body .dyn-table-container table").length;
+            var bodyHeight = $("#layout .body").height();
+            var rowHeight = bodyHeight / rowLength;
+            rowHeight = rowHeight - 1;
+            var rowLableHeight = rowHeight - $(".body .dyn-table-container .dyn-lable-row").height() - 1;
+            $(".body .dyn-table-container .dyn-table-row").height(rowHeight);
+            $(".body .dyn-table-container .dyn-lable-row").css('margin-top', rowLableHeight + 'px');
+            $(".body .dyn-table-container .dyn-add-row").css('margin-top', rowLableHeight + 'px');
+
+            // Setting up cell height
+            $(".body .dyn-table-container td > li").height('0px');
+            var cellHeight = $(".body .dyn-table-container td").height();
+            $(".body .dyn-table-container td > li").height(cellHeight);
+        };
+
+        // This method will attach table properties after response
+        var attachPropertiesToDynamicTable = function(response) {
+            // Attach ID to specific table cells or rows
+            for (var index = 0; index < response.length; ++index) {
+                var obj = response[index];
+                var parentId = obj.parentItem;
+                var id = obj.id;
+
+                switch (obj.type) {
+                    case appGlobals.globals.ContentType.table.id:
+                        var tableElement = $("#layout .body .dyn-table-container");
+                        $(tableElement).attr("id", id);
+                        $(tableElement).data("property", obj);
+                        break;
+
+                    case appGlobals.globals.ContentType.tablerow.id:
+                        var rowElement = $("#" + obj.id);
+                        $(rowElement).attr("data-parent", parentId);
+                        $(rowElement).data("property", obj);
+                        break;
+
+                    case appGlobals.globals.ContentType.tablecolumn.id:
+                        var indexPosition = appGlobals.globals.findIndexOfElement(obj.properties, "Index");
+                        var cellElement = $("#layout .body .dyn-table-row#" + parentId + " td:eq(" + indexPosition + ")");
+                        $(cellElement).attr("id", id);
+                        $(cellElement).attr("data-parent", parentId);
+                        $(cellElement).data("property", obj);
+                        break;
+
+                    default:
+                        break;
+
+                }
+            }
+        };
+
+        // This method will attach properties to dynamic table
+        var fetchTableRowProperties = function(property, appVersion, bkColors) {
+            var value = '';
+            var bgColorFound = false;
+
+            switch (property.name.toLowerCase()) {
+                case "insets":
+                    var top = $.trim($(".rows-type .top").val()) + ",";
+                    var left = $.trim($(".rows-type .left").val()) + ",";
+                    var bottom = $.trim($(".rows-type .bottom").val()) + ",";
+                    var right = $.trim($(".rows-type .right").val());
+                    value = top + left + bottom + right;
+                    property.value = value;
+                    break;
+
+                case "height":
+                    value = $.trim($(".rows-type .height").val());
+                    property.value = value;
+                    break;
+
+                case "backgroundcolor":
+                    if (appVersion >= 4) {
+                        bgColorFound = true;
+                        if (bkColors !== null) {
+                            property.value = bkColors;
+                        }
+                    }
+                    break;
+
+                case "textcolor":
+                    if (appVersion <= 3) {
+                        bgColorFound = true;
+                        if (bkColors !== null) {
+                            property.value = bkColors;
+                        }
+                    }
+                    break;
+
+                default:
+                    break;
+
+            }
+
+            return {'property': property, 'bgColorFound': bgColorFound};
+        };
+
+        // This method will draw table into page canvas
+        this.drawTableOnCanvas = function(response) {
+            // This POC will draw table into the page canvas
+            var rowSpecificColumn = {};
+            var rowArray = [];
+
+            // Separating rows, columns and table object from response
+            for (var index = 0; index < response.length; ++index) {
+                var content = response[index];
+
+                switch (content.type) {
+                    case appGlobals.globals.ContentType.tablerow.id:
+                        rowArray.push(content);
+                        break;
+
+                    case appGlobals.globals.ContentType.tablecolumn.id:
+                        var rowId = content.parentItem;
+                        if (rowSpecificColumn[rowId]) {
+                            rowSpecificColumn[rowId] = ++rowSpecificColumn[rowId];
+                        } else {
+                            rowSpecificColumn[rowId] = 1;
+                        }
+                        break;
+
+                    default:
+                        break;
+
+                }
+
+            }
+            var data = {};
+            data.column = rowSpecificColumn;
+            data.row = rowArray;
+
+            // Table is now created
+            appGlobals.globals.pubsubQueue.publish("addRowAndColumn", data);
+
+            // Attaching properties to each component of a table like table, row and cell
+            attachPropertiesToDynamicTable(response);
+
+            // Attach droppable event
+            appGlobals.globals.pubsubQueue.publish("attachDroppableEvent");
+            appGlobals.globals.pubsubQueue.publish("attachEvent");
+        };
+
+        // This method will add components to outer layout table
+        var addElemntToOuterLayout = function(elementArr, objArr) {
+            var hasTable = $(".dyn-table-layout").length > 0 ? true : false;
+            if ($("#layout .body .dyn-table td:not(.empty-container)").length === 0) {
+                $("#layout .body .dyn-table").remove();
+            }
+
+            // Making call to placeElement method of DynamicContent.js
+            var dataObj = {};
+            dataObj.elementList = elementArr;
+            dataObj.objArr = objArr;
+
+            // This will draw components on page canvas
+            appGlobals.globals.pubsubQueue.publish("moveToOuterLayout", dataObj);
+
+            // Updating order of each element
+            var updateOrderArr = [];
+            $(".dyn-table td:not(empty-container) > li").each(function(index) {
+                var obj = $(this).data('property');
+                var expectedOrder = index + 1;
+
+                if (hasTable === true) {
+                    ++expectedOrder;
+                }
+
+                if (obj.order !== expectedOrder) {
+                    var newObj = {};
+                    newObj.newOrder = expectedOrder;
+                    newObj.id = obj.id;
+                    updateOrderArr.push(newObj);
+                }
+            });
+
+            // Making ajax call to update orders
+            appGlobals.globals.pubsubQueue.publish("updateComponentOrder", updateOrderArr);
+
+            // Making call to setDynamicEvent method of DynamicContent.js
+            appGlobals.globals.pubsubQueue.publish("attachEvent");
+        };
+
+        var callbacks = {
+            // This method will save table information
+            clbkSaveTableFlyover: function(response) {
+                rowcolumnCount();
+                if (rowNo === 0 || colNo === 0) {
+                    return false;
+                }
+
+                if (response.type === "click") {
+                    // Table will be created if does not exist else will be updated
+                    createUpdateDynamicTable(response);
+                } else {
+                    // Make API call to fetch call application list
+                    if (!appGlobals.globals.ContentType.table) {
+                        appGlobals.globals.isUpdateAppContentTypeList = 1;
+                        appGlobals.globals.pubsubQueue.publish("getApplicationContentType", {action: 'drawTable', data: response});
+                    } else {
+                        // Drawing table on page canvas with given rows and cells
+                        self.drawTableOnCanvas(response);
+                    }
+                }
+            },
+            // This method will save table information
+            clbkSaveTableRowFlyover: function() {
+                var appVersion = parseInt($("#application-name .selected-name").attr("value"));
+                var selectedTableRow = $("#layout .body .selected-table-row").nextAll('.dyn-table-row:eq(0)');
+                var rowObject = $(selectedTableRow).data('property');
+                var pageId = $("#hidden-page-id").val();
+                var appId = $("#application-name").attr("data-id");
+                var imageId = '';
+                var bgColorFound = false;
+                var bkColor = $('.rows-type .well .demo i').css('background-color');
+                var bkColors = appGlobals.globals.generateColorCode(bkColor);
+                if ($(".rows-type .img-pane > img").length > 0) {
+                    imageId = $(".rows-type .img-pane > img").attr("data-id");
+                }
+
+                for (var index = 0; index < rowObject.properties.length; ++index) {
+                    var data = fetchTableRowProperties(rowObject.properties[index], appVersion, bkColors);
+                    rowObject.properties[index] = data.property;
+                    bgColorFound = data.bgColorFound;
+                }
+
+                if (bgColorFound === false && bkColors) {
+                    if (appVersion >= 4) {
+                        rowObject.properties.push({name: "BackgroundColor", value: bkColors});
+                    } else {
+                        rowObject.properties.push({name: "TextColor", value: bkColors});
+                    }
+                }
+
+                rowObject.imageId = imageId;
+
+                var postObject = {};
+                postObject.type = "POST";
+                postObject.async = true;
+                postObject.dataType = 'json';
+                postObject.data = {"type": 'content', 'appId': appId, 'pageId': pageId, 'entityId': rowObject.id, 'entityInfo': JSON.stringify(rowObject)};
+                postObject.url = appGlobals.globals.appbuilderURL + 'edit-page-contents';
+
+                // Making API call to save table row information
+                appGlobals.globals.ajaxCalling(postObject);
+            },
+            // This method will save table information
+            clbkSaveTableColumnFlyover: function() {
+                var cellId = $(".columns-type").attr("selected-column");
+                var columnObject = $("#" + cellId).data('property');
+                var pageId = $("#hidden-page-id").val();
+                var appId = $("#application-name").attr("data-id");
+                var insetsFound = false;
+                var top = $.trim($(".columns-type .inset .top:visible").val());
+                var left = $.trim($(".columns-type .inset .left:visible").val());
+                var bottom = $.trim($(".columns-type .inset .bottom:visible").val());
+                var right = $.trim($(".columns-type .inset .right:visible").val());
+                var value = '';
+
+                for (var index = 0; index < columnObject.properties.length; ++index) {
+                    var propertyName = columnObject.properties[index].name.toLowerCase();
+                    if (propertyName === "width") {
+                        value = $(".columns-type .width").val();
+                        columnObject.properties[index].value = value;
+                    } else if (propertyName === "insets") {
+                        insetsFound = true;
+                        value = top + ',' + left + ',' + bottom + ',' + right;
+                        columnObject.properties[index].value = value;
+                    }
+                }
+
+                if (insetsFound === false) {
+                    value = top + ',' + left + ',' + bottom + ',' + right;
+                    columnObject.properties.push({name: "Insets", value: value});
+                }
+
+                var postObject = {};
+                postObject.type = "POST";
+                postObject.async = true;
+                postObject.dataType = 'json';
+                postObject.data = {"type": 'content', 'appId': appId, 'pageId': pageId, 'entityId': columnObject.id, 'entityInfo': JSON.stringify(columnObject)};
+                postObject.url = appGlobals.globals.appbuilderURL + 'edit-page-contents';
+
+                // Making API call to save table cell information
+                appGlobals.globals.ajaxCalling(postObject);
+            },
+            // This method will show reset table modal
+            clbkResetTable: function() {
+                var isTableExist = $(".body .dyn-table-container").length > 0 ? true : false;
+                if (isTableExist === true) {
+                    $("#reset-table").modal('show');
+                }
+            },
+            // This method will remove component from flyover of table rows and cell
+            clbkDeleteFromFlyover: function() {
+                var selectedClass = $(this).parents("[class*='-type']").attr("class");
+                var flyover = selectedClass.split("-type ")[0];
+                var newData = {"type": "page-content"};
+                var obj = {"type": "POST", "async": true, "url": appGlobals.globals.appbuilderURL + 'delete-entity'};
+                var elementArr = [];
+                var objArr = [];
+
+                switch (flyover) {
+                    case "table":
+                        $("#layout .body [data-type='Table'] i").click();
+                        break;
+
+                    case "rows":
+                        var table = $("#layout .body .table-container .selected-table-row").next();
+                        $(table).find("td:not(.empty-container) li").each(function() {
+                            var obj = $(this).data('property');
+                            var html = $(this).removeAttr("data-parent").parent().html();
+
+                            obj.parentItem = '';
+                            elementArr.push(html);
+                            objArr.push(obj);
+                        });
+
+                        // Updating elements
+                        for (var index = 0; index < objArr.length; ++index) {
+                            appGlobals.globals.pubsubQueue.publish("updateComponent", objArr[index]);
+                        }
+
+                        // API calling to remove cells first
+                        $(table).find("td").each(function() {
+                            var id = $(this).attr("id");
+                            newData.entityId = id;
+                            obj.data = newData;
+                            appGlobals.globals.ajaxCalling(obj);
+                        });
+
+                        // API calling to delete row
+                        newData.entityId = $(table).attr('id');
+                        obj.data = newData;
+                        appGlobals.globals.ajaxCalling(obj);
+
+                        // Removing table as well as row
+                        $(table).remove();
+                        $("#layout .body .table-container .selected-table-row").remove();
+
+                        $("#layout .body .table-row").each(function(index) {
+                            var value = index + 1;
+                            $(this).html('R' + value);
+                        });
+                        break;
+
+                    default:
+                        // The default case is considered specifically for table cell
+                        var cell = $("#layout .body .dyn-table-layout td.selected-table-column");
+                        if ($(cell).parents("tr").find("td").length > 1) {
+
+                            if ($(cell).hasClass('empty-container') === false) {
+                                var element = $("#layout .body .dyn-table-layout td.selected-table-column li");
+
+                                $(element).removeAttr("data-parent");
+                                $(element).data('property').parentItem = '';
+
+                                elementArr = element;
+                                objArr.push($(element).data('property'));
+                            }
+
+                            // API calling to delete row
+                            newData.entityId = $(cell).attr('id');
+                            obj.data = newData;
+                            appGlobals.globals.ajaxCalling(obj);
+                            $(cell).remove();
+                        }
+                        break;
+
+                }
+
+                // This will draw components in outer layout of page canvas
+                if (elementArr.length > 0) {
+                    addElemntToOuterLayout(elementArr, objArr);
+                }
+            },
+            // This method will open modal to associate image from Assets Manager
+            clbkUploadModalOpen: function(event) {
+                var obj = {};
+                obj.data = appGlobals.globals.getImageData;
+                obj.level = 0;
+                obj.fromDynContent = true;
+
+                $('.img-common-modal').attr("class", "modal fade img-common-modal");
+
+                if ($(event.target).parents(".rows-type").length > 0) {
+                    $('.img-common-modal').addClass("row-bg-upload");
+                } else {
+                    $('.img-common-modal').addClass("column-bg-upload");
+                }
+
+                // Making call to generate tree structure
+                if ($(".img-common-modal tbody tr").length <= 0) {
+                    appGlobals.globals.pubsubQueue.publish("generateTreeStructure", obj);
+
+                    // Making call to reload content
+                    appGlobals.globals.pubsubQueue.publish("reloadTreeStructureContent");
+
+                    $('.img-common-modal .div-table-content .table-strucure').addClass('table-strucure-height');
+                    $('.common-modal #submitHandler').attr("disabled", "disabled");
+                }
+            },
+            // This method will remove existing background image
+            clbkRemoveRowBackgroundImage: function() {
+                var rowFlyover = $('.rows-type .row-img-display');
+                $(rowFlyover).find('img').attr('src', '');
+                $(rowFlyover).find('img').attr('data-id', '');
+                $(rowFlyover).removeClass('img-added');
+            },
+            // This method will remove existing background image
+            clbkRemoveColumnBackgroundImage: function() {
+                var columnFlyover = $('.columns-type .column-img-display');
+                $(columnFlyover).find('img').attr('src', '');
+                $(columnFlyover).find('img').attr('data-id', '');
+                $(columnFlyover).removeClass('img-added');
+            },
+            // This method will add rows and column to layout
+            clbkAddSelectedRowColumn: function() {
+                var cols = $.trim($('.dyn-flyover-right .table-type input.selected-column').val());
+                var rows = $.trim($('.dyn-flyover-right .table-type input.selected-row').val());
+
+                if (!cols || parseInt(cols) > 10) {
+                    $('.dyn-flyover-right .table-type input.selected-column').val('');
+                    cols = '';
+                }
+                if (!rows || parseInt(rows) > 10) {
+                    $('.dyn-flyover-right .table-type input.selected-row').val('');
+                    rows = '';
+                }
+
+                $("#selectable .ui-selected").removeClass('ui-selected');
+                if (rows && cols) {
+                    colNo = parseInt(cols);
+                    rowNo = parseInt(rows);
+
+                    for (var rowIndex = 1; rowIndex <= rows; ++rowIndex) {
+                        for (var colIndex = 1; colIndex <= cols; ++colIndex) {
+                            $("#selectable .row-" + rowIndex + ".column-" + colIndex).addClass('ui-selected');
+                        }
+                    }
+
+                    var pageId = $("#hidden-page-id").val();
+                    if (!pageId) {
+                        $('.save-page').click();
+                    } else {
+                        $(".edit-table-save").click();
+
+                        // Disable table grid for selection
+                        var tableInput = $(".table-type .selected-row, .table-type .selected-column");
+                        $(tableInput).attr('disabled', 'disabled');
+                        $(tableInput).addClass('noselect');
+                        $('#selectable').selectable('disable');
+                    }
+                }
+            },
+            // This method used for click dynamically save table
+            clbkSaveTableClick: function() {
+                $(".edit-table-save").click();
+            },
+            // This method used for click dynamically save rows
+            clbkSaveRowClick: function() {
+                $(".edit-rows-save").click();
+            },
+            // This method used for click dynamically save columns
+            clbkSaveColumnClick: function() {
+                $(".edit-columns-save").click();
+            },
+            // This method will show delete cell cirfirmation dialogue
+            clbkConfirmDelete: function() {
+                var cellWithComponent = $(".dyn-table-container .selected-table-column:not(.empty-container)");
+                if (cellWithComponent.length > 0) {
+                    $("#delete-cells").modal('show');
+                } else {
+                    callbacks.clbkDeleteCell();
+                }
+            },
+            // This method will delete table cell
+            clbkDeleteCell: function() {
+                // Hiding the delete cell modal
+                $("#delete-cells").modal('hide');
+                var selectedCells = $('.body .selected-table-column');
+                var newData = {"type": "page-content"};
+                var obj = {"type": "POST", "async": true, "url": appGlobals.globals.appbuilderURL + 'delete-entity'};
+
+                $(selectedCells).each(function() {
+                    // Check if last cell then restrick user from deleting it
+                    var isLastCell = $(this).parent().find('td').length === 1 ? true : false;
+                    if (isLastCell === true) {
+                        $(this).removeClass('selected-table-column');
+                        return;
+                    }
+                    var componentId;
+                    var hasComponent = $(this).hasClass('empty-container') === false ? true : false;
+                    if (hasComponent === true) {
+                        // Delete component
+                        componentId = $(this).find("> li").attr("id");
+                        newData.entityId = componentId;
+                        obj.data = newData;
+                        appGlobals.globals.ajaxCalling(obj);
+                    }
+                    // Delete cell
+                    componentId = $(this).attr("id");
+                    newData.entityId = componentId;
+                    obj.data = newData;
+                    appGlobals.globals.ajaxCalling(obj);
+
+                    // Remove from UI as well
+                    $(selectedCells).remove();
+                });
+
+                $(".dyn-lable-row:visible").hide();
+                // Close flyover
+                $('#dynamic-setup-edit-flyover').hide('slide', {direction: 'right'}, 500);
+            },
+            // This method will allow only numbers
+            clbkValidateNumbers: function(event) {
+                var supportedCharArr = [37, 39, 36, 35, 110, 190, 8, 46];
+                event = (event) ? event : window.event;
+                var charCode = (event.which) ? event.which : event.keyCode;
+                if ((charCode >= 96 && charCode <= 105) || (charCode >= 48 && charCode <= 57) ||
+                        $.inArray(charCode, supportedCharArr) > -1) {
+                    var value = $(this).val();
+                    if (value.indexOf('.') > -1 && (charCode === 110 || charCode === 190)) {
+                        return false;
+                    }
+                    return true;
+                }
+                return false;
+            },
+            // This method will add a new row at the end of table
+            clbkAddRow: function() {
+                var rowElement = $(this).next('table.dyn-table-row');
+                var cellCount = $(rowElement).find('td').length;
+
+                $(".body .dyn-table-container .selected-table-row").removeClass('selected-table-row');
+                $(".dyn-lable-row:visible, .dyn-add-row:visible").hide();
+
+                // Close flyover
+                $('#dynamic-setup-edit-flyover').hide('slide', {direction: 'right'}, 500);
+                $("#add-content-dyn-edit-flyover > div").hide();
+                addRows(1, cellCount);
+            },
+            // This method will create table from input boxes
+            clbkCreateTableForInput: function(event) {
+                event = (event) ? event : window.event;
+                var charCode = (event.which) ? event.which : event.keyCode;
+                var charKeyValue = [37, 39, 46, 36, 35, 8];
+
+                if ((charCode >= 48 && charCode <= 57) || (charCode >= 96 && charCode <= 105) ||
+                        $.inArray(charCode, charKeyValue) > -1) {
+                    return true;
+
+                }
+                return false;
+            }
+        };
+
+        // This method will create a new table
+        var createDynamicTable = function(appVersion, pageId, color) {
+            var obj = {};
+            obj.type = "POST";
+            obj.async = true;
+            obj.dataType = 'json';
+            obj.url = appGlobals.globals.appbuilderURL + 'add-edit-table';
+
+            var dataObj = {};
+            dataObj.properties = [];
+            if (color) {
+                dataObj.properties.push({name: "TextColor", value: color});
+                if (appVersion >= 4) {
+                    dataObj.properties.push({name: "BackgroundColor", value: color});
+                }
+            }
+
+            obj.data = {"rows": rowNo, "cols": colNo, "pageId": pageId, "info": JSON.stringify(dataObj)};
+            appGlobals.globals.ajaxCalling(obj, callbacks.clbkSaveTableFlyover);
+        };
+
+        // This method will update properties of existing dynamic table
+        var updateDynamicTableProperties = function(appVersion, appId, pageId, color, tableObj) {
+            // Table already exist, just modify components
+            var isBackgroundColorFound = false;
+
+            for (var index = 0; index < tableObj.properties.length; ++index) {
+                var propertyName = tableObj.properties[index].name.toLowerCase();
+                if ((propertyName === "backgroundcolor" && parseInt(appVersion) >= 4) ||
+                        (propertyName === "textcolor" && parseInt(appVersion) <= 3)) {
+                    if (color) {
+                        tableObj.properties[index].value = color;
+                    }
+                    isBackgroundColorFound = true;
+                }
+            }
+
+            if (isBackgroundColorFound === false && color) {
+                tableObj.properties.push({name: "TextColor", value: color});
+                if (appVersion >= 4) {
+                    tableObj.properties.push({name: "BackgroundColor", value: color});
+                }
+            }
+
+            // Updating table object
+            $(".dyn-table-container").data("property", tableObj);
+
+            // Updating table through API
+            var updateObj = {};
+            updateObj.type = "POST";
+            updateObj.async = true;
+            updateObj.dataType = 'json';
+            updateObj.data = {"type": 'content', 'appId': appId, 'pageId': pageId, 'entityId': tableObj.id, 'entityInfo': JSON.stringify(tableObj)};
+            updateObj.url = appGlobals.globals.appbuilderURL + 'edit-page-contents';
+            appGlobals.globals.ajaxCalling(updateObj);
+        };
+
+        // This method will create table if does not exist else will update its properties
+        var createUpdateDynamicTable = function(event) {
+            // Making API call to add contents inside table
+            var appId = $("#application-name").attr("data-id");
+            var appVersion = parseInt($("#application-name .selected-name").attr("value"));
+            var pageId = $("#hidden-page-id").val();
+            var textColors = $('.table-type .well .demo i').css('background-color');
+            var color = appGlobals.globals.generateColorCode(textColors);
+
+            var tableId = $(".dyn-table-container").attr("id");
+            if (tableId) {
+                if ($(event.target).hasClass('ui-selectable') === true || $(event.target).parents('ol').hasClass('ui-selectable') === true) {
+                    return false;
+                }
+
+                var tableObj = $(".dyn-table-container").data("property");
+                if (tableObj && tableObj.properties) {
+                    updateDynamicTableProperties(appVersion, appId, pageId, color, tableObj);
+                }
+
+            } else {
+                createDynamicTable(appVersion, pageId, color);
+            }
+        };
+
+        // This method will bind callbacks to events
+        var registerEvents = function() {
+            $('.edit-table-save').click(callbacks.clbkSaveTableFlyover);
+            $('.edit-rows-save').click(callbacks.clbkSaveTableRowFlyover);
+            $('.edit-columns-save').click(callbacks.clbkSaveTableColumnFlyover);
+            $('.dyn-flyover-right .table-type').on('focusout', 'input:not(.selected-column):not(.selected-row)', callbacks.clbkSaveTableClick);
+            $('.dyn-flyover-right .table-type').on('keydown', 'input.selected-column,input.selected-row', callbacks.clbkCreateTableForInput);
+            $('.dyn-flyover-right .rows-type').on('focusout', 'input', callbacks.clbkSaveRowClick);
+            $('.dyn-flyover-right .columns-type').on('focusout', 'input', callbacks.clbkSaveColumnClick);
+            $('.dyn-flyover-right .table-type .colorpicker-component').colorpicker().on('hidePicker.colorpicker', callbacks.clbkSaveTableClick);
+            $('.dyn-flyover-right .rows-type .colorpicker-component').colorpicker().on('hidePicker.colorpicker', callbacks.clbkSaveRowClick);
+            $('.dyn-flyover-right .columns-type .colorpicker-component').colorpicker().on('hidePicker.colorpicker', callbacks.clbkSaveColumnClick);
+            $('.table-type .btn-grey-dark.reset-table').click(callbacks.clbkResetTable);
+            $('.remove-row-img').click(callbacks.clbkRemoveRowBackgroundImage);
+            $('.remove-column-img').click(callbacks.clbkRemoveColumnBackgroundImage);
+            $(".rows-type .edit-delete, .columns-type .edit-delete, .table-type .edit-delete").click(callbacks.clbkDeleteFromFlyover);
+            $('.columns-type .delete-cell').click(callbacks.clbkConfirmDelete);
+            $('#delete-cells #confirm-delete-cell').click(callbacks.clbkDeleteCell);
+            $('.columns-type .width, .rows-type .height').on('keydown', callbacks.clbkValidateNumbers);
+            $(".rows-type #browse-img .img-select, .columns-type #browse-img .img-select").on('click', callbacks.clbkUploadModalOpen);
+            $(".table-type .selected-row, .table-type .selected-column").keyup(callbacks.clbkAddSelectedRowColumn);
+            $(".body").on("click", ".dyn-add-row", callbacks.clbkAddRow);
+        };
+
+        // This method will count selected rows and columns
+        var rowcolumnCount = function() {
+            var numSelected = 0;
+            colNo = 0;
+            rowNo = 0;
+            numSelected = $('.ui-selected').length;
+
+            for (var i = 1; i < 11; i++) {
+                if ($('.column-' + i).hasClass('ui-selected')) {
+                    colNo++;
+                    $('.selected-column').val(colNo);
+                    rowNo = numSelected / colNo;
+                    $('.selected-row').val(rowNo);
+                }
+            }
+        };
+
+        // This is a startup method for Table flyover
+        this.init = function() {
+            registerEvents();
+            $("#selectable").selectable({
+                stop: function() {
+                    // If table grid is diabled then just return
+                    if ($('#selectable').hasClass('ui-selectable-disabled') === true) {
+                        return;
+                    }
+
+                    var pageId = $("#hidden-page-id").val();
+                    rowcolumnCount();
+                    if (!pageId) {
+                        $('.save-page').click();
+                    } else {
+                        $('.edit-table-save').click();
+
+                        // Disable table grid for selection
+                        var tableInput = $(".table-type .selected-row, .table-type .selected-column");
+                        $(tableInput).attr('disabled', 'disabled');
+                        $(tableInput).addClass('noselect');
+                        $('#selectable').selectable('disable');
+                    }
+                }
+            });
+
+        };
+    };
+
+    return TableComponentFlyover;
+});

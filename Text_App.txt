@@ -1,0 +1,22 @@
+define(['Callbacks', 'Globals'], function(Callbacks, Globals) {
+    var currentTab = $.trim($("#dashboard-sub-nav-container li.sub-nav-menu-item-selected a").text());
+    window.appGlobals = {
+        globals: Globals
+    };
+
+    switch (currentTab)
+    {
+        case "Asset Manager" :
+            require([Globals.assetPath + 'AssetGlobal']);
+            break;
+
+        case "Publisher" :
+            require([Globals.publishingPath + 'PublishingGlobal']);
+            break;
+
+        case "App Builder" :
+        default:
+            require([Globals.dyncontentPath + 'DynamicContentGlobal']);
+            break;
+    }
+});

@@ -1,0 +1,922 @@
+define(function() {
+
+    // Declaring an object that contains all methods for asset generation
+    var TreeStructure = function() {
+        // Set this flag to true for enabling column resizing
+        var isResizable = false;
+        var self = this;
+        var hierarchy = [];
+        this.isRegisterEvent = false;
+        this.jsonResponse = '';
+        this.folderTreeStructure = '';
+
+        // This object contains list of all constants used in this js file
+        var constants = {
+            DELETE_LOGO: appGlobals.globals.imgPath + appGlobals.globals.assetPath + 'delete_x.png',
+            DELETE_HOVER_LOGO: appGlobals.globals.imgPath + appGlobals.globals.assetPath + 'delete_x_hover.png',
+            FOLDER_CAROT_GREY: appGlobals.globals.imgPath + appGlobals.globals.assetPath + 'folder_carot_gray.png',
+            FOLDER_CAROT_HOVER: appGlobals.globals.imgPath + appGlobals.globals.assetPath + 'folder_carot_hover.png',
+            VERTICAL_ELLIPSES: appGlobals.globals.imgPath + 'overflow_dots.png',
+            VERTICAL_ELLIPSES_HOVER: appGlobals.globals.imgPath + 'overflow_dots_hover.png',
+            FILE_PDF_LOGO: appGlobals.globals.imgPath + 'samplePdfIcon.jpg'
+        };
+
+        // This method will generate HTML Content for FILE/Images
+        var generateFileHTML = function(node, fileTemplate, background, level) {
+            var size = Math.round(node.size / 1000) + " kb";
+            var type = node.type.type.replace('.', '');
+            var name = node.name.substr(0, node.name.lastIndexOf('.'));
+            var note = '';
+
+            if (node.notes) {
+                note = node.notes;
+            }
+
+            var newFileMarkup = fileTemplate.replace("data-level='0'", "data-level='" + level + "'");
+            if (name !== "") {
+                newFileMarkup = newFileMarkup.replace("{|name|}", name);
+            }
+            var fileIconImage = appGlobals.globals.imgPath + appGlobals.globals.assetPath + 'folder-icon@2x.png';
+            newFileMarkup = newFileMarkup.replace("{|iconImage|}", fileIconImage);
+            newFileMarkup = newFileMarkup.replace("{|size|}", size);
+            newFileMarkup = newFileMarkup.replace("{|type|}", type);
+            newFileMarkup = newFileMarkup.replace("{|note|}", note);
+            newFileMarkup = newFileMarkup.replace("{|background|}", background);
+
+            if (type === "pdf") {
+                newFileMarkup = newFileMarkup.replace("{|url|}", constants.FILE_PDF_LOGO);
+            }
+
+            $("#list-table tbody").append(Mustache.render(newFileMarkup, node));
+        };
+
+        // This method will generate HTML content for FOLDER.
+        var generateFolderHTML = function(node, folderTemplate, background, level) {
+            // Generate HTML Content for FOLDER
+            var hasChildren = (node.files && node.files.length > 0) ||
+                    (node.folders && node.folders.length > 0) ? true : false;
+            var newFolderMarkup = folderTemplate.replace('data-level="0"', 'data-level="' + level + '"');
+            newFolderMarkup = newFolderMarkup.replace("{|background|}", background);
+            var folderIconImage = appGlobals.globals.imgPath + appGlobals.globals.assetPath + 'folder-icon@2x.png';
+            newFolderMarkup = newFolderMarkup.replace("{|iconImage|}", folderIconImage);
+            $("#list-table tbody").append(Mustache.render(newFolderMarkup, node));
+            if (typeof (node.files) !== 'undefined') {
+                if (node.files.length <= 0) {
+                    $("#list-table #" + node.id + " li .download-img").parents("li").remove();
+                }
+            } else {
+                $("#list-table #" + node.id + " li .download-img").parents("li").remove();
+            }
+
+            if (hasChildren) {
+                generateHTML(node, level + 1);
+            }
+        };
+
+        // This method will generate tree structured tags
+        var generateHTML = function(data, level, fromDynContent) {
+            if (data.folders || data.files) {
+                var children = data.files ? data.files : [];
+                children = children.concat(data.folders ? data.folders : []);
+                var background = 'even-child';
+                var fileTemplate = $("#new-file-template").html();
+                var folderTemplate = $("#new-folder-template").html();
+                Mustache.tags = ['{|', '|}'];
+
+                if (children) {
+                    var childLength = children.length;
+                    for (var index = 0; index < childLength; ++index) {
+                        var node = children[index];
+                        var isFolder = node.type ? false : true;
+
+                        if (isFolder) {
+                            generateFolderHTML(node, folderTemplate, background, level);
+                        } else {
+                            generateFileHTML(node, fileTemplate, background, level);
+                        }
+
+                        if (!fromDynContent) {
+                            $.data($("#" + node.id)[0], 'property', node);
+                        }
+
+                        background = background === 'even-child' ? 'odd-child' : 'even-child';
+                    }
+                }
+            }
+        };
+
+        // This method will hide/show tree structure nodes
+        this.hideTree = function(id, action) {
+            $("tr[data-parent='" + id + "']").each(function() {
+                var isFolder = this.className.toLowerCase().indexOf('folder-info') > -1 ? true : false;
+                var isVisible = (true === isFolder) && (true === $(this).is(":visible")) ? true : false;
+
+                if (action) {
+                    $(this).hide();
+                } else {
+                    $(this).toggle();
+                }
+
+                if (isVisible) {
+                    self.hideTree($(this).attr("id"), 'hide');
+                } else if (isFolder === true && isVisible === false) {
+                    var element = $(this).find("span");
+                    if (element.length > 0) {
+                        var className = $(element).attr("class");
+                        if (className.indexOf("-open") > -1) {
+                            self.setClassName(element);
+                        }
+                    }
+                }
+            });
+        };
+
+        // This method will apply styles to tree hierarchy
+        this.reloadContent = function() {
+            $("tbody tr").each(function() {
+                var element = $(this).attr("data-parent");
+                var level = parseInt($(this).attr("data-level")) * 25;
+                var className = ($(this).attr("class"));
+
+                if (className) {
+                    if (className.indexOf('file-info') > -1) {
+                        $(this).find(".content img").css("margin-left", level + 16 + "px");
+                    } else if (className.indexOf('folder-info') > -1) {
+                        var parentId = $(this).attr("id");
+                        var hasChildren = $("tr[data-parent='" + parentId + "']").length > 0 ? true : false;
+
+                        if (hasChildren === true) {
+                            $(this).find(".content img").css("margin-left", level + 16 + "px");
+                        } else {
+                            if ($(this).find(".name img").length === 1) {
+                                $(this).find(".name img").remove();
+                            }
+                            $(this).find(".content .foldername").css("margin-left", level + 10 + 10 + 18 + "px");
+                        }
+                    }
+                }
+
+                if (element && $(this).attr("data-level") !== "0") {
+                    $(this).hide();
+                }
+            });
+
+            // This POC is used for column resizing
+            if (isResizable === true) {
+                $('table th, table td').resizable({
+                    handles: 'e',
+                    minWidth: 18
+                });
+            }
+        };
+
+        // This method will be used to call generateHTML method from outer js file
+        this.callGenerateTreeStructure = function(data) {
+            var inputData = data.data;
+            var level = data.level;
+            var fromDynContent = data.fromDynContent;
+            generateHTML(inputData, level, fromDynContent);
+        };
+
+        // This method will replace folder images in open or close
+        this.setClassName = function(element) {
+            var isAssetFolder = $(element).parents(".folder-info").hasClass("asset-folder-info");
+
+            if (isAssetFolder) {
+                return false;
+            }
+
+            if (element.length > 0) {
+                var classNames = $(element).attr("class");
+
+                if (classNames.indexOf("-close") > -1) {
+                    classNames = classNames.replace("-close", "-open");
+                    $(element).find('img').attr("src", constants.FOLDER_CAROT_HOVER);
+                } else {
+                    classNames = classNames.replace("-open", "-close");
+                    $(element).find('img').attr("src", constants.FOLDER_CAROT_GREY);
+                }
+                $(element).attr("class", classNames);
+            }
+        };
+
+        // This method will delete child
+        this.deleteChild = function(id) {
+            var currentLevel = parseInt($(".assets#" + id).attr("data-level"));
+            var nextRowLevel = parseInt($(".assets#" + id).next("tr").attr("data-level"));
+
+            if (currentLevel < nextRowLevel) {
+                $(".folder-info#" + id).next("tr").remove();
+                nextRowLevel = parseInt($(".assets#" + id).next("tr").attr("data-level"));
+                if (currentLevel < nextRowLevel) {
+                    self.deleteChild(id);
+                }
+            }
+        };
+
+        // This method will generate table structure of search result.
+        var generateSearchHTML = function(data) {
+            $("#list-table-head thead tr").html("<th data-name='name'> <span class='retina-icon'>&nbsp;</span><span>Name</span></th><th data-name='path'>Path</th>");
+            $("#list-table tbody").html('');
+            if (data.items.length) {
+                $.each(data.items, function(i, field) {
+                    var searchTemplate = $("#search-list-template").html();
+                    Mustache.tags = ['{|', '|}'];
+                    $("#list-table tbody").append(Mustache.render(searchTemplate, field));
+                    $.data($("#" + field.id)[0], 'property', field);
+
+                    var fileName = field.name;
+                    var types = field.type;
+                    if (fileName.length > 60) {
+                        fileName = fileName.substring(0, 60);
+                        fileName = fileName + "...";
+                    }
+                    $("#" + field.id).find(".name .filename").html(fileName);
+                    fileName = fileName + types.type;
+                    $("#" + field.id).find(".name .filename").attr("title", fileName);
+                });
+                if (appGlobals.globals.isRetina) {
+                    var element = "#list-table tr td .file-type img";
+                    appGlobals.globals.updateRetinaImageName(element);
+                }
+            } else {
+                $("#list-table tbody").append("<tr><td colspan='2' class='no-records'>Results not found</td></tr>");
+            }
+        };
+
+        // This method will get hierarchy of parent folder.
+        var getParentId = function(id) {
+            $('.ajax-status-icons').css('display', 'block');
+            var url = appGlobals.globals.assetURL + 'get-folder-info';
+            var obj = {folder: id, depth: -1, includeFiles: false};
+            $.ajax({
+                type: "GET",
+                async: false,
+                dataType: "json",
+                url: url,
+                data: obj,
+                beforeSend: function() {
+                    $('.ajax-status-icons').css('display', 'block');
+                },
+                success: function(response) {
+                    if (response.parent) {
+                        hierarchy.push(response.parent);
+                        getParentId(response.parent);
+                    } else {
+                        var listTable = $("#list-table");
+                        $(listTable).html('');
+                        $(listTable).append('<thead><tr><th data-name="name" class="search-by-name">NAME</th><th data-name="size">SIZE</th><th data-name="type">TYPE</th><th data-name="notes">NOTES</th><th>&nbsp;</th></tr></thead><tbody></tbody>');
+                        generateHTML(self.jsonResponse, 0);
+                        self.reloadContent();
+
+                        if (self.isRegisterEvent === false) {
+                            registerEvents();
+                            self.isRegisterEvent = true;
+                        }
+
+                        if (hierarchy) {
+                            var id = hierarchy.reverse().pop();
+                            $.each(hierarchy, function(index, element) {
+                                $("#" + element + " .name img").click();
+                            });
+                            $("#" + id).addClass("searchedFile");
+                            $('.ajax-status-icons').css('display', 'none');
+                        }
+                    }
+                },
+                error: function(response) {
+                    var errorMessage = JSON.parse(response.responseText).message;
+                    appGlobals.globals.errorMessage(errorMessage, "error");
+                }
+            });
+        };
+
+        // This object contains list of all callbacks
+        var callbacks = {
+            // This method will toggle folders/files
+            clbkFolderLogoClick: function(event) {
+                var hasParent = $(this).parents('tr').length > 0 ? true : false;
+                var element = $(event.target);
+                var id;
+
+                if (hasParent === true) {
+                    id = $(this).parents('tr').attr("id");
+                } else {
+                    if (event.target.tagName === "IMG") {
+                        element = $(element).parent();
+                    }
+                    id = $(element).parents('tr').attr("id");
+                }
+
+                if ($("[data-parent='" + id + "']").length > 0) {
+                    if (hasParent === true) {
+                        self.setClassName($(this));
+                    } else {
+                        self.setClassName($(element));
+                    }
+                }
+            },
+            // This method will add look and feel on row mouse over
+            clbkRowMouseover: function() {
+                var element = $(this).find("td:eq(4) img");
+
+                if (element.length > 0) {
+                    if ($(element).attr('class').indexOf('remove') > -1) {
+                        $(element).attr('src', constants.DELETE_HOVER_LOGO);
+                    } else {
+                        $(element).attr('src', constants.VERTICAL_ELLIPSES_HOVER);
+                    }
+                }
+            },
+            // This method will remove styles on row mouse out
+            clbkRowMouseout: function() {
+                var element = $(this).find("td:eq(4) img");
+
+                if (element.length > 0) {
+                    if ($(element).attr('class').indexOf('remove') > -1) {
+                        $(element).attr('src', constants.DELETE_LOGO);
+                    } else {
+                        $(element).attr('src', constants.VERTICAL_ELLIPSES);
+                    }
+                }
+            },
+            // This method will save a folder
+            clbkSaveFolderClick: function(response) {
+                var name = $.trim($("#createFolder .folder-name").val());
+                var parentId = $("#createFolder #hidden-parent-id").val();
+                var parents = $("#createFolder #hidden-parent-id").data("parents");
+                var url = appGlobals.globals.assetURL + 'create-update-folder';
+                var objFolderDetails = {};
+
+                if (response && response.type !== "click") {
+                    self.jsonResponse = response;
+                    var html = '';
+                    appGlobals.globals.generateHTML(response);
+                    if (parents) {
+                        var parentData = parents.parentDetails;
+                        for (var index = 0; index < parentData.length; index++) {
+                            var parentDetails = parentData[index];
+                            if (!index) {
+                                html = html + '<li class="root inner-folder" id="' + parentDetails.id + '">Asset Manager</li>';
+                            } else {
+                                html = html + ' <i class="icon-chevron-right"></i> <li class="inner-folder" id="' + parentDetails.id + '" data-name="' + parentDetails.name + '">' + parentDetails.name + '</li>';
+                            }
+                            parentId = parentDetails.id;
+                        }
+                        $(".breadcrumb.folder-navigation").html(html);
+                    }
+                    var parameterObj = {"folderId": parentId, "sort": 1};
+                    appGlobals.globals.getFolderFiles(parameterObj);
+                } else {
+                    if (name === "") {
+                        $("#createFolder .asset-error").show();
+                        $("#createFolder input.folder-name").css('border', '1px solid #b3d4fc');
+                        $("#createFolderAssets .asset-error").show();
+                        $("#createFolderAssets input.folder-name").css('border', '1px solid #b3d4fc');
+                        return 0;
+                    }
+                    $(".close").click();
+                    objFolderDetails.name = name;
+                    objFolderDetails.parent = parentId;
+                    var folderInfoObj = {folderInfo: JSON.stringify(objFolderDetails)};
+
+                    var componentObj = {};
+                    componentObj.type = "POST";
+                    componentObj.async = true;
+                    componentObj.dataType = 'json';
+                    componentObj.data = folderInfoObj;
+                    componentObj.url = url;
+                    appGlobals.globals.ajaxCalling(componentObj, callbacks.clbkSaveFolderClick);
+                }
+            },
+            // This method will show confirm delete dialogue for folder
+            clbkConfirmDeleteFolder: function() {
+                var id = $(this).closest('tr').attr("id");
+                var type = "folder";
+                $("#common-alert .hidden-id").val(id);
+                $("#common-alert .asset-type").val(type);
+                $("#common-alert #headerLabel").html("Delete Folder?");
+                $("#common-alert .padding-bottom b").html("Are you sure you want to delete this folder?");
+                $("#common-alert .padding-bottom p").html("This action will delete all child assets of respective folder as well.");
+                $("#common-alert #deleteAssets").html("Yes");
+            },
+            // This method will show confirm delete dialogue for file
+            clbkConfirmDeleteFile: function() {
+                var id = $(this).closest('tr').attr("id");
+                var type = "file";
+
+                $(".hidden-id").val(id);
+                $(".asset-type").val(type);
+                $("#common-alert #headerLabel").html("Delete File?");
+                $("#common-alert .padding-bottom b").html("Are you sure you want to delete this file?");
+                $("#common-alert .padding-bottom p").html("This action cannot be undone");
+                $("#common-alert #deleteAssets").html("Delete");
+            },
+            // This method will update hide removed folder assets html.
+            clbkDeleteFolderAssets: function(response) {
+                var id = response.data;
+                var folderId = $(".breadcrumb li:last-child").attr("id");
+                var folderName = $(".breadcrumb li:last-child").attr("data-name");
+                var parameterObj = {"folderId": folderId, "sort": 1};
+
+                $("#" + id).closest('li.parent_li').remove();
+                $(".table-condensed thead th i").removeClass("fa-caret-down").addClass("fa-caret-up");
+                $('.table-condensed thead th[data-name="name"]').removeClass("descending").addClass("ascending");
+                $("#createFolder #hidden-parent-id").val(folderId);
+                $("#createFolder .folder-tree .tree li span.folder").removeClass("active");
+                $("#createFolder #id-" + folderId).addClass("active");
+                $("#createFolder .selected-parent b").html(folderName);
+                $("#uploadFile #parent-folder-id").val(folderId);
+                $("#uploadFile .folder-tree .tree li span.folder").removeClass("active");
+                $("#uploadFile #id-" + folderId).addClass("active");
+                $("#uploadFile .selected-parent b").html(folderName);
+                appGlobals.globals.getFolderFiles(parameterObj);
+            },
+            // This method will update hide removed file assets html.
+            clbkDeleteFileAssets: function(response) {
+                var id = response.data;
+                $("#" + id).remove();
+                var records = $("#list-table tbody tr").length;
+                if (!records) {
+                    $(".empty-folder").css("display", "block");
+                }
+                $('.ajax-status-icons').css('display', 'none');
+            },
+            // This method will remove file/folder
+            clbkDeleteAssets: function() {
+                var id = $(this).parent().find(".hidden-id").val();
+                var type = $(this).parent().find(".asset-type").val();
+                var url;
+                $("#common-alert .btn-cancel").click();
+                if (type === "folder") {
+                    url = appGlobals.globals.assetURL + 'delete-folder';
+                    var folderObj = {id: id};
+                    var componentObj = {};
+
+                    componentObj.type = "POST";
+                    componentObj.async = true;
+                    componentObj.dataType = 'json';
+                    componentObj.data = folderObj;
+                    componentObj.url = url;
+                    appGlobals.globals.ajaxCalling(componentObj, callbacks.clbkDeleteFolderAssets);
+                } else {
+                    url = appGlobals.globals.assetURL + 'delete-file';
+                    var fileObj = {id: id};
+                    var componentObj = {};
+
+                    componentObj.type = "POST";
+                    componentObj.async = true;
+                    componentObj.dataType = 'json';
+                    componentObj.data = fileObj;
+                    componentObj.url = url;
+                    appGlobals.globals.ajaxCalling(componentObj, callbacks.clbkDeleteFileAssets);
+                }
+            },
+            // This method will show rename dialogue
+            clbkPreRenameFolder: function() {
+                var id = $(this).parents("tr").attr("id");
+                var name = $(this).parents("tr").find(".foldername").html();
+
+                $("#renameFolderName").val(name);
+                $("#renameFolder .rename-folder-id").val(id);
+                $("#renameFolder .asset-error").hide();
+            },
+            // This method will show rename dialogue
+            clbkPreRenameFile: function() {
+                var id = $(this).parents("tr").attr("id");
+                var name = $(this).parents("tr").find(".filename").html();
+                var type = $(this).parents("tr").find(".filename").attr("data-type");
+
+                name = name.split('.');
+                if (name.length > 1) {
+                    name.pop();
+                }
+                name = name.toString();
+                $("#rename-file-name").val(name);
+                $("#rename-file .rename-file-id").val(id);
+                $("#rename-file .rename-file-id").attr("data-type", type);
+                $("#rename-file .asset-error").hide();
+            },
+            // This method will show create folder dialogue
+            clbkCreateFolder: function() {
+                var obj = $(this).parents("tr").data().property;
+                var id = obj.id;
+                var name = $(this).parents("tr").data().property.name;
+
+                $("#hidden-parent-id").val(id);
+                $(".folder-name").val('');
+                $(".folder-tree .tree li span.folder").removeClass("active");
+                $("#id-" + id).addClass("active");
+                $("#createFolder .selected-parent b").html(name);
+                $("#createFolder .asset-error").hide();
+            },
+            // This method will show upload dialogue
+            clbkUploadFile: function() {
+                var obj = $(this).parents("tr").data().property;
+                var id = obj.id;
+                var name = $(this).parents("tr").data().property.name;
+
+                $("#parent-folder-id").val(id);
+                $(".folder-tree .tree li span.folder").removeClass("active");
+                $("#id-" + id).addClass("active");
+                $(".drag-drop-pane .selected-parent b").html(name);
+                $(".drag-drop-pane #submitHandler").attr('disabled', true);
+                $(".drag-drop-pane #submitHandler").addClass("upload-btn-inactive");
+                $(".footer-browse-text").removeClass("inactive");
+                $(".footer-browse-text").addClass("active");
+            },
+            // This method will rename a folder
+            clbkRenameFolder: function(response) {
+                var newName = $.trim($("#renameFolderName").val());
+                if (response && response.type !== "click") {
+                    var parentId = $(".breadcrumb li:last-child").attr("id");
+                    var parameterObj = {"folderId": parentId, "sort": 1};
+                    appGlobals.globals.getFolderFiles(parameterObj);
+                } else {
+                    var newNameLength = newName.length;
+                    if (!newNameLength) {
+                        $("#renameFolder .asset-error").show();
+                        return false;
+                    }
+                    var url = appGlobals.globals.assetURL + 'create-update-folder';
+                    var id = $(this).parent().find(".rename-folder-id").val();
+                    var objFolderDetails = {};
+                    objFolderDetails.id = id;
+                    objFolderDetails.name = newName;
+                    $(".close").click();
+                    var folderInfoObj = {folderInfo: JSON.stringify(objFolderDetails)};
+                    $(this).parents("#renameFolder").find(".btn-cancel").click();
+                    var componentObj = {};
+                    componentObj.type = "POST";
+                    componentObj.async = true;
+                    componentObj.dataType = 'json';
+                    componentObj.data = folderInfoObj;
+                    componentObj.url = url;
+                    appGlobals.globals.ajaxCalling(componentObj, callbacks.clbkRenameFolder);
+                }
+            },
+            // This method will rename a file
+            clbkRenameFile: function(response) {
+                if (response && response.type !== "click") {
+                    var parentId = $(".breadcrumb li:last-child").attr("id");
+                    var parameterObj = {"folderId": parentId, "sort": 1};
+                    appGlobals.globals.getFolderFiles(parameterObj);
+                    $('.ajax-status-icons').css('display', 'none');
+                } else {
+                    var newFileName = $.trim($("#rename-file-name").val());
+                    var objFlyoverDetails = {};
+                    var url;
+                    var id = $(this).parent().find(".rename-file-id").val();
+                    var type = $(this).parent().find(".rename-file-id").attr("data-type");
+
+                    url = appGlobals.globals.assetURL + 'update-file';
+                    $("#rename-file .asset-error").hide();
+                    if (newFileName === "") {
+                        $("#rename-file .asset-error").show();
+                        return false;
+                    }
+                    $(".close").click();
+                    objFlyoverDetails.id = id;
+                    objFlyoverDetails.name = newFileName + type;
+                    $('.ajax-status-icons').css('display', 'block');
+                    var fileInfoObj = {folderInfo: JSON.stringify(objFlyoverDetails)};
+                    var componentObj = {};
+                    componentObj.type = "POST";
+                    componentObj.async = true;
+                    componentObj.dataType = 'json';
+                    componentObj.data = fileInfoObj;
+                    componentObj.url = url;
+                    appGlobals.globals.ajaxCalling(componentObj, callbacks.clbkRenameFile);
+                }
+            },
+            // This method will download images
+            clbkDownloadImg: function() {
+                var id = $(this).parents("tr").attr("id");
+                var url = appGlobals.globals.assetURL + 'download-images/' + id + '';
+
+                $(this).attr("href", url);
+            },
+            // This method will apply sorting
+            clbkSorting: function() {
+                var type = $(this).attr("data-name");
+                var url = appGlobals.globals.assetURL + 'sort-data';
+
+                // This condition does not allow sorting for search table column.
+                if (type !== "search-name" && type !== "search-path") {
+                    var obj = {type: type};
+                    $.ajax({
+                        type: "GET",
+                        async: false,
+                        dataType: "json",
+                        url: url,
+                        data: obj,
+                        beforeSend: function() {
+                            $('.ajax-status-icons').css('display', 'block');
+                        },
+                        success: function(response) {
+                            self.isRegisterEvent = true;
+                            self.jsonResponse = response;
+                            self.init(hierarchy);
+                            $('.ajax-status-icons').css('display', 'none');
+                        },
+                        error: function(response) {
+                            var errorMessage = JSON.parse(response.responseText).message;
+                            $("#common-error .modal-body b").html(errorMessage);
+                            $("#common-error-link").click();
+                        }
+                    });
+                }
+            },
+            // Create folder pop-up close
+            clbkCreateFolderPopupClose: function() {
+                $("#createFolder .accordion-toggle").addClass("collapsed");
+                $("#createFolder .folder-tree").css("height", "0px");
+                $("#createFolder .folder-tree").removeClass("in");
+            },
+            // This method will initiate search on clicking close icon.
+            clbkClearSearchEntity: function() {
+                $("#list-table-head thead tr").html('<th data-name="name" class="ascending"><span class="retina-icon">&nbsp;</span><span>Name</span><i class="fa fa-1x fa-caret-up"></i></th><th data-name="size">Size</th><th>&nbsp;</th>');
+                $("#list-table tbody").html('');
+                $("#search-btn").removeClass("icon-remove");
+                $("#search-btn").addClass("icon-search");
+                $(".search-form .form-control").val('');
+                $(".breadcrumb.folder-navigation").html('<li class="root inner-folder" id="' + self.jsonResponse.id + '">Asset Manager</li>');
+                var url = appGlobals.globals.assetURL + 'get-root-structure';
+                var data = {"sort": 1};
+                $('.ajax-status-icons').show();
+                $.ajax({
+                    type: "GET",
+                    async: true,
+                    url: url,
+                    data: data,
+                    dataType: "json",
+                    error: function() {
+                        appGlobals.globals.errorMessage("Server error, please contact administrator.", "error");
+                        document.getElementById("firstLevelFolder").style.pointerEvents = 'none';
+                        document.getElementById("createFirstLevelFolder").style.pointerEvents = 'none';
+                        document.getElementById("uploadFirstLevelAssets").style.pointerEvents = 'none';
+                        $('.ajax-status-icons').hide();
+                    },
+                    success: function(data) {
+                        self.jsonResponse = data;
+                        appGlobals.globals.generateFolderFileList(self.jsonResponse);
+                    },
+                    complete: function() {
+                        $('.ajax-status-icons').hide();
+                    }
+                });
+            },
+            // This method will initiate search on hitting enter
+            clbkSearchEntity: function(e) {
+                var code = e.keyCode || e.which;
+                var searchBy = $.trim($(".search-form .form-control").val());
+
+                $(".breadcrumb.folder-navigation").html('<li class="root inner-folder" id="' + self.jsonResponse.id + '">Asset Manager</li>');
+                if (code === 13 || e.type === "click") {
+                    if (searchBy === "") {
+                        callbacks.clbkClearSearchEntity();
+                    } else {
+                        var url = appGlobals.globals.assetURL + "search-entity";
+
+                        $("#search-btn").removeClass("icon-search");
+                        $("#search-btn").addClass("icon-remove");
+                        $('.ajax-status-icons').show();
+                        var obj = {searchBy: searchBy};
+                        $.ajax({
+                            type: "GET",
+                            async: true,
+                            dataType: "json",
+                            data: obj,
+                            url: url,
+                            beforeSend: function() {
+                                $('.ajax-status-icons').show();
+                            },
+                            success: function(response) {
+                                generateSearchHTML(response);
+                            },
+                            error: function(response) {
+                                var errorMessage = JSON.parse(response.responseText).message;
+                                $("#common-error .modal-body b").html(errorMessage);
+                                $("#common-error-link").click();
+                            },
+                            complete: function() {
+                                $('.ajax-status-icons').hide();
+                            }
+                        });
+                    }
+                }
+            },
+            //This method will close file upload modal
+            clbkCloseFileUpload: function() {
+                var folderName = $(".breadcrumb.folder-navigation li:last-child").attr("data-name");
+                var folderId = $(".breadcrumb.folder-navigation li:last-child").attr("id");
+
+                $(".drag-drop-pane,.modal-backdrop").hide();
+                $("#createFolderAssets .asset-error").hide();
+                $("#uploadFile .selected-parent b").html(folderName);
+                $("#uploadFile #parent-folder-id").val(folderId);
+                $("#uploadFile .folder-tree .tree li span.folder").removeClass("active");
+                $("#uploadFile #id-" + folderId).addClass("active");
+                $("#uploadFile #parent-folder-id").data("parents", '');
+            },
+            // This method will navigate through folder
+            clbkNavigateFolder: function() {
+                var folderId = $(this).parents(".folder-info").attr("id");
+                var folderName = $(this).parent().find(".foldername").text();
+                if ($('.ajax-status-icons').css('display') === 'block') {
+                    return false;
+                }
+                $(".folder-name").val('');
+                var parameterObj = {"folderId": folderId, "sort": 1};
+                appGlobals.globals.getFolderFiles(parameterObj);
+                $("#flyover .close-flyover").click();
+                var lastParentId = $(".breadcrumb.folder-navigation li:last-child").attr("id");
+                if (lastParentId !== folderId) {
+                    $('.table-condensed thead th i').removeClass("fa-caret-down").addClass("fa-caret-up");
+                    $('.table-condensed thead th[data-name="name"]').removeClass("descending").addClass("ascending");
+                    $(".folder-navigation").append("<li class='inner-folder' id='" + folderId + "' data-name='" + folderName + "'> <i class='icon-chevron-right'></i> " + folderName + "</li>");
+                    $("#createFolder #hidden-parent-id").val(folderId);
+                    $("#createFolder .folder-tree .tree li span.folder").removeClass("active");
+                    $("#createFolder #id-" + folderId).addClass("active");
+                    $("#createFolder .selected-parent b").html(folderName);
+                    $("#uploadFile #parent-folder-id").val(folderId);
+                    $("#uploadFile .folder-tree .tree li span.folder").removeClass("active");
+                    $("#uploadFile #id-" + folderId).addClass("active");
+                    $("#uploadFile .selected-parent b").html(folderName);
+                }
+            },
+            // This function called on click of bedcrum name click
+            clbkBedcrumFolderClick: function() {
+                var folderId = $(this).attr("id");
+                var folderName = $(this).attr("data-name");
+                var parameterObj = {"folderId": folderId, "sort": 1};
+
+                $("#flyover .close-flyover").click();
+                if ($(this).is(':last-child')) {
+                    return false;
+                }
+
+                $(".table-condensed thead th i").removeClass("fa-caret-down").addClass("fa-caret-up");
+                $('.table-condensed thead th[data-name="name"]').removeClass("descending").addClass("ascending");
+                $(this).nextAll().remove();
+                $("#createFolder #hidden-parent-id").val(folderId);
+                $("#createFolder .folder-tree .tree li span.folder").removeClass("active");
+                $("#createFolder #id-" + folderId).addClass("active");
+                $("#createFolder .selected-parent b").html(folderName);
+                $("#uploadFile #parent-folder-id").val(folderId);
+                $("#uploadFile .folder-tree .tree li span.folder").removeClass("active");
+                $("#uploadFile #id-" + folderId).addClass("active");
+                $("#uploadFile .selected-parent b").html(folderName);
+                appGlobals.globals.getFolderFiles(parameterObj);
+
+            },
+            // This function will sort files and folders
+            clbkSortFolderFiles: function() {
+                $("#flyover .close-flyover").click();
+                if ($("#list-table tbody tr").length !== 0) {
+                    var element = $('.table-condensed thead th[data-name="name"]');
+                    var folderId = $('.folder-navigation li:last').attr("id");
+                    var parameter = {};
+                    var sort = 1;
+
+                    if (element.hasClass("ascending")) {
+                        element.removeClass("ascending").addClass("descending");
+                        $(".table-condensed thead th i").removeClass("fa-caret-up").addClass("fa-caret-down");
+                        sort = 2;
+                    } else {
+                        element.removeClass("descending").addClass("ascending");
+                        $(".table-condensed thead th i").removeClass("fa-caret-down").addClass("fa-caret-up");
+                        sort = 1;
+                    }
+                    parameter = {"folderId": folderId, "sort": sort};
+                    $('.ajax-status-icons').show();
+                    appGlobals.globals.getFolderFiles(parameter);
+                }
+            },
+            //This method will set dropdown position
+            clbkdropDownFixPosition: function() {
+                var dropdown = $(this).parent().find(".dropdown-menu");
+                var dropDownTop = $(this).offset().top + $(this).outerHeight();
+                dropdown.css('top', dropDownTop + "px");
+                dropdown.css('left', $(this).offset().left + "px");
+            },
+            clbkRecreateTable: function(assetId, type, parentId, temp, isParent) {
+
+                // If folder stucture not defined then define it
+                if (!temp) {
+                    temp = self.jsonResponse;
+                }
+
+                // If file to be deleted is found in the object then delete it
+                if (type === 'file' && temp.files.length > 0 && isParent === true) {
+                    for (var a in temp.files) {
+                        if (temp.files[a].id === assetId) {
+                            // Code to remove file
+                            temp.files.splice(a, 1);
+                            return temp;
+                        }
+                    }
+                } else if (type === 'folder' && 'folders' in temp && temp.folders.length > 0 && isParent === true) {
+                    // If folder to be deleted is found in the object then delete it
+                    for (var b in temp.folders) {
+                        if (temp.folders[b].id === assetId) {
+                            // Code to remove folder
+                            temp.folders.splice(b, 1);
+                            return temp;
+                        }
+                    }
+                }
+
+                // If root folder is the parent folder of file/folder to be deleted then iterate
+                if (temp.id === parentId) {
+                    temp = callbacks.clbkRecreateTable(assetId, type, parentId, temp, true);
+                    return temp;
+                }
+
+                // If folders exist in the object then iterate through it
+                if ('folders' in temp && temp.folders.length > 0) {
+                    for (var i in temp.folders) {
+
+                        // If current folder is the parent folder of file/folder to be deleted then iterate
+                        if (temp.folders[i].id === parentId) {
+                            temp.folders[i] = callbacks.clbkRecreateTable(assetId, type, parentId, temp.folders[i], true);
+                            return temp;
+                        } else {
+                            // Iterate until parent folder of file/folder to be deleted is found
+                            temp.folders[i] = callbacks.clbkRecreateTable(assetId, type, parentId, temp.folders[i], false);
+
+                        }
+                    }
+                }
+
+                return temp;
+            }
+        };
+
+        // This method will call 'clbkFolderLogoClick' from outer js file
+        this.callFolderLogoClick = function(event) {
+            callbacks.clbkFolderLogoClick(event);
+        };
+
+        // This method will bind callbacks to events
+        var registerEvents = function() {
+            $('#list-table.table').on('mouseover', 'tbody tr', callbacks.clbkRowMouseover);
+            $('#list-table.table').on('mouseout', 'tbody tr', callbacks.clbkRowMouseout);
+            $('#saveFolder').on('click', callbacks.clbkSaveFolderClick);
+            $('#create-folder-btn #new-file-upload').on('click', callbacks.clbkCloseFileUpload);
+            $('#saveFolderAssets').on('click', callbacks.clbkSaveFolderClick);
+            $('.table').on('click', '.delete-folder', callbacks.clbkConfirmDeleteFolder);
+            $('#deleteAssets').on('click', '', callbacks.clbkDeleteAssets);
+            $('.table').on('click', '.rename-folder', callbacks.clbkPreRenameFolder);
+            $('.table').on('click', '.rename-file', callbacks.clbkPreRenameFile);
+            $('#renameFolder #renameFolderDetails').on('click', callbacks.clbkRenameFolder);
+            $('#rename-file #rename-file-details').on('click', callbacks.clbkRenameFile);
+            $('.table').on('click', '.create-folder', callbacks.clbkCreateFolder);
+            $('.table').on('click', '.remove-file', callbacks.clbkConfirmDeleteFile);
+            $('.table').on('click', '.upload-file', callbacks.clbkUploadFile);
+            $('.table').on('click', '.download-img', callbacks.clbkDownloadImg);
+            $('.table').on('click', 'th.search-by-name', callbacks.clbkSorting);
+            $('.search-form').on('keyup', 'input.form-control', callbacks.clbkSearchEntity);
+            $('.search-form').on('click', '#search-btn.icon-search', callbacks.clbkSearchEntity);
+            $('.search-form').on('click', '#search-btn.icon-remove', callbacks.clbkClearSearchEntity);
+            $('#createFolder').on('click', '.close', callbacks.clbkCreateFolderPopupClose);
+            $('#createFolder').on('click', '.btn-cancel', callbacks.clbkCreateFolderPopupClose);
+            $('.sub-content').on('click', '#list-table .folder-info .content span', callbacks.clbkNavigateFolder);
+            $('.sub-content').on('click', '.folder-navigation li.inner-folder', callbacks.clbkBedcrumFolderClick);
+            $('.table-condensed thead').on('click', 'tr th[data-name="name"]', callbacks.clbkSortFolderFiles);
+            $('.table tbody').on('click', 'td .dropdown-toggle', callbacks.clbkdropDownFixPosition);
+        };
+
+        // This is a startup method for generating tree structure
+        this.init = function(hierarchy) {
+            // Generate HTML Content dynamically
+            $("#list-table tbody").html('');
+
+            appGlobals.globals.generateFolderFileList(self.jsonResponse);
+
+            // Set root folder id for navigation
+            var rootId = self.jsonResponse.id;
+            $(".folder-navigation .root").attr("id", rootId);
+
+            var height = $("body").height();
+            height = height - 181;
+
+            $(".sub-content .div-table-content").css("height", height);
+
+            if (self.isRegisterEvent === false) {
+                registerEvents();
+                self.isRegisterEvent = true;
+            }
+
+            self.folderTreeStructure.init();
+
+            if (hierarchy) {
+                $.each(hierarchy.reverse(), function(index, element) {
+                    $("#" + element + " .name img").click();
+                });
+            }
+        };
+    };
+
+    return TreeStructure;
+});

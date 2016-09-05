@@ -1,0 +1,21 @@
+define(['Treestructure', 'Uploadfiles', 'Flyover', 'Foldertree'], function(TreeStructure, UploadFiles, Flyover, Foldertree) {
+    // Tree Structure related functionality starts here
+    var TS = new TreeStructure();
+    TS.jsonResponse = appGlobals.globals.getFolderDetails();
+
+    // Folder tree related functionality starts here
+    var FT = new Foldertree();
+    FT.jsonResponse = TS.jsonResponse;
+    TS.folderTreeStructure = FT;
+    TS.init();
+
+    // Upload Files related functionality starts here
+    var UF = new UploadFiles();
+    UF.folderTreeStructure = TS;
+    UF.init();
+
+    // Flyover related functionality starts here
+    var FO = new Flyover();
+    FO.folderTreeStructure = TS;
+    FO.init();
+});
